@@ -1,0 +1,12 @@
+file runner
+break main
+# break setUpFork
+
+# delete XXXX
+
+set detach-on-fork off
+set follow-fork-mode child
+# set follow-exec-mode new
+
+run
+
