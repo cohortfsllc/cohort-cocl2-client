@@ -11,10 +11,18 @@
 #include <sys/socket.h>
 
 
+#if !SHM_TEST && !STREAM_TEST && !DGRAM_TEST && !SRPC_TEST
+#error must define either SHM_TEST, STREAM_TEST, DGRAM_TEST, or SRPC_TEST
+#endif
+
 // define one of STREAM_TEST, DGRAM_TEST, SRPC_TEST
-#if !defined(STREAM_TEST) && !defined(DGRAM_TEST) && \
-    !defined(SRPC_TEST) && !defined(SHM_TEST)
-#error must define either STREAM_TEST, DGRAM_TEST, or SRPC_TEST
+// #if !defined(STREAM_TEST) && !defined(DGRAM_TEST) &&  \
+//     !defined(SRPC_TEST) && !defined(SHM_TEST)
+// #error must define either STREAM_TEST, DGRAM_TEST, or SRPC_TEST
+// #endif
+
+#if GDB
+#warning GDB turned on
 #endif
 
 
@@ -33,10 +41,12 @@ const char* socketTypeDesc(int socket_type) {
 
 char* const cmd_vec[] = {
     "/home/ivancich/CoCl2/nacl2/native_client/scons-out/dbg-linux-x86-64/staging/sel_ldr",
+#if GDB
     "-c", // debug_mode_ignore_validator
     // "-c", // repeating skips entirely
     "-d", // debug_mode_startup_signal
     "-g", // enable_debug_stub
+#endif
     "-Q", // skip_qualification
     // "-v", // verbosity
     "-B",

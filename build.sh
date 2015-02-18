@@ -1,22 +1,19 @@
 #!/bin/sh
 
-# sdk=/home/ivancich/CoCl2/nacl_sdk/pepper_39
-public=/home/ivancich/CoCl2/nacl2/native_client/src/public
-nacl=/home/ivancich/CoCl2/nacl2/native_client/toolchain/linux_x86/pnacl_newlib/le32-nacl
-top=/home/ivancich/CoCl2/nacl2
+sdk=${HOME}/CoCl2/nacl_sdk/pepper_40
+export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 
-TEST=-DSHM_TEST=1
+TEST=-DDGRAM_TEST=1
 # TEST=-DSHM_TEST=0 -DSRPC_TEST=0 -DSTREAM_TEST=0 -DDGRAM_TEST=0
 
+echo compiling runner
 g++ -g $TEST -o runner -std=c++11 -Wno-write-strings runner.cc
 
 compile() {
     echo compiling ${2}
     ${1} $TEST -o ${2}.pexe \
-        -I${top} \
-        -I${nacl}/include \
+	-I${sdk}/include/pnacl \
         ${2}.cc
-#        -L${nacl}/lib \
     echo translating ${2}
     pnacl-translate -arch x86-64 --allow-llvm-bitcode-input \
         -o ${2}_x86_64.nexe \

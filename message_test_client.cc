@@ -1,22 +1,11 @@
 #include <iostream>
-// #include "sys/socket.h"
+#include "sys/socket.h"
 #include "sys/mman.h"
-// #include "sys/fcntl.h"
-// #include "nacl_io/nacl_io.h"
-// #include "imc_types.h"
-// #include "imc_syscalls.h"
-#include "nacl/nacl_imc_c.h"
 
 #include "unistd.h"
 #include "assert.h"
 
-
-// define one of STREAM_TEST, DGRAM_TEST, SRPC_TEST
-#if SHM_TEST
-#elif STREAM_TEST
-#elif DGRAM_TEST
-#elsif SRPC_TEST
-#else
+#if !SHM_TEST && !STREAM_TEST && !DGRAM_TEST && !SRPC_TEST
 #error must define either SHM_TEST, STREAM_TEST, DGRAM_TEST, or SRPC_TEST
 #endif
 
@@ -168,72 +157,72 @@ void streamTest(const int fd) {
     std::cout << "client closed " << fd << std::endl;
 }
 
+int send_message(int sock_fd, char *data, size_t data_size,
+                 int *fds, int fds_size) {
+    struct msghdr msg;
+    struct iovec iov;
+
+    msg.msg_name = NULL;
+    msg.msg_namelen = 0;
+
+    iov.iov_base = data;
+    iov.iov_len = data_size;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    msg.msg_control = fds;
+    msg.msg_controllen = fds_size;
+
+    int result = sendmsg(sock_fd, &msg, 0);
+
+    return result;
+}
+
+
+int receive_message(int sock_fd, void* data, size_t data_size,
+                    int* fds, int fds_size, int* fds_got) {
+    struct msghdr msg;
+    struct iovec iov;
+
+    msg.msg_name = NULL;
+    msg.msg_namelen = 0;
+
+    iov.iov_base = data;
+    iov.iov_len = data_size;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    msg.msg_control = fds;
+    msg.msg_controllen = fds_size;
+
+    int received = recvmsg(sock_fd, &msg, 0);
+    if (fds_got != NULL) {
+        *fds_got = msg.msg_controllen;
+    }
+
+    return received;
+}
+
 
 void dgramTest(const int fd) {
     char buffer[200];
     int buffer_len = sizeof(buffer);
-    int read_size = recvDgram(fd, (void*) buffer, buffer_len);
-    // doTransaction(fd);
+    int fds[1];
+    int fds_received;
+    int read_size = receive_message(fd,
+                                    (void*) buffer, buffer_len,
+                                    fds, 1, &fds_received);
+
+    if (read_size < 0) {
+        perror("client trying to receive datagram");
+    } else {
+        std::cout << "receive got " << read_size << " chars and "
+                  << fds_received << " file descriptors" << std::endl;
+    }
 }
 
 
 #if 0
-int send_message(int sock_fd, char *data, size_t data_size,
-                 int *fds, int fds_size) {
-    struct NaClAbiNaClImcMsgIoVec iov;
-    struct NaClAbiNaClImcMsgHdr msg;
-    iov.base = data;
-    iov.length = data_size;
-    msg.iov = &iov;
-    msg.iov_length = 1;
-    msg.descv = fds;
-    msg.desc_length = fds_size;
-    return imc_sendmsg(sock_fd, &msg, 0);
-}
-#endif
-
-
-int send_message(int sock_fd, char *data, size_t data_size,
-                 int *fds, int fds_size) {
-    NaClMessageHeader msg;
-    NaClIOVec iov;
-    NaClHandle* handles;
-
-    iov.base = data;
-    iov.length = data_size;
-    msg.iov = &iov;
-    msg.iov_length = 1;
-
-    handles = (NaClHandle *) calloc(sizeof(NaClHandle), fds_size);
-    for (int i = 0; i < fds_size; ++i) {
-        handles[i] = fds[i];
-    }
-    handle_count = fds_size;
-
-    int result = imc_sendmsg(sock_fd, &msg, 0);
-
-    free(handles);
-}
-
-
-int receive_message(int sock_fd, char *data, size_t data_size,
-                    int *fds, int fds_size, int *fds_got) {
-  struct NaClAbiNaClImcMsgIoVec iov;
-  struct NaClAbiNaClImcMsgHdr msg;
-  int received;
-  iov.base = data;
-  iov.length = data_size;
-  msg.iov = &iov;
-  msg.iov_length = 1;
-  msg.descv = fds;
-  msg.desc_length = fds_size;
-  received = imc_recvmsg(sock_fd, &msg, 0);
-  if (fds_got != NULL)
-    *fds_got = msg.desc_length;
-  return received;
-}
-
-
 int sharedMemoryTest(const int imc_fd) {
     int myReturn = 0;
     int shm_size = 100;
@@ -315,6 +304,7 @@ int sharedMemoryTest(const int imc_fd) {
 
     return myReturn;
 }
+#endif
 
 
 int main(int argc, char* argv[], char* arge[]) {
