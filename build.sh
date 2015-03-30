@@ -3,17 +3,24 @@
 sdk=${HOME}/CoCl2/nacl_sdk/pepper_40
 export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 
+# comment out to remove runtime gdb hooks
+GDB=-DGDB=1
+
+# one of -DSHM_TEST=1 , -DSRPC_TEST=1 , -DSTREAM_TEST=1 , -DDGRAM_TEST=1
+
 TEST=-DDGRAM_TEST=1
-# TEST=-DSHM_TEST=0 -DSRPC_TEST=0 -DSTREAM_TEST=0 -DDGRAM_TEST=0
 
 echo compiling runner
-g++ -g $TEST -o runner -std=c++11 -Wno-write-strings runner.cc
+g++ -g $GDB $TEST -o runner -std=c++11 -Wno-write-strings runner.cc
 
 compile() {
     echo compiling ${2}
     ${1} $TEST -o ${2}.pexe \
+	-I${sdk}/include \
 	-I${sdk}/include/pnacl \
-        ${2}.cc
+	-L${sdk}/lib/pnacl/Release \
+        ${2}.cc \
+	-lnacl_io
     echo translating ${2}
     pnacl-translate -arch x86-64 --allow-llvm-bitcode-input \
         -o ${2}_x86_64.nexe \

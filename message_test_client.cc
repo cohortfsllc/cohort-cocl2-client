@@ -1,6 +1,11 @@
 #include <iostream>
+#include "string.h"
+
 #include "sys/socket.h"
 #include "sys/mman.h"
+
+#include "nacl_io/nacl_io.h"
+#include "nacl_io/kernel_intercept.h"
 
 #include "unistd.h"
 #include "assert.h"
@@ -136,9 +141,13 @@ void destructiveCheckFds(int start, int end) {
         errno = 0;
         int bad1 = close(fd);
         bool bad2 = errno == EBADF;
-        std::cout << "fd: " << fd << "; results: " << bad1 << ", " <<
-            bad2 << ", " << errno << std::endl;
-        if (errno) perror("perror");
+
+        std::cout << "fd: " << fd << ": ";
+        if (bad1 < 0) {
+            std::cout << "BAD -- " << strerror(errno) << std::endl;
+        } else {
+            std::cout << "GOOD" << std::endl;
+        }
     }
     std::cout << "done checking fds" << std::endl;
 }
@@ -173,7 +182,7 @@ int send_message(int sock_fd, char *data, size_t data_size,
     msg.msg_control = fds;
     msg.msg_controllen = fds_size;
 
-    int result = sendmsg(sock_fd, &msg, 0);
+    int result = ki_sendmsg(sock_fd, &msg, 0);
 
     return result;
 }
@@ -195,7 +204,7 @@ int receive_message(int sock_fd, void* data, size_t data_size,
     msg.msg_control = fds;
     msg.msg_controllen = fds_size;
 
-    int received = recvmsg(sock_fd, &msg, 0);
+    int received = ki_recvmsg(sock_fd, &msg, 0);
     if (fds_got != NULL) {
         *fds_got = msg.msg_controllen;
     }
@@ -323,8 +332,17 @@ int main(int argc, char* argv[], char* arge[]) {
         printArray(arge, "env_var");
     }
 
-    // destructiveCheckFds(0, 10);
-    //    assert(0 == nacl_io_init());
+
+    // #define NACL_IO 1
+    // #define KI 1
+
+#if NACL_IO
+    assert(0 == nacl_io_init());
+#endif
+
+#if KI
+    ki_init(NULL);
+#endif
 
 #if SHM_TEST
     sharedMemoryTest(fd);
@@ -334,7 +352,13 @@ int main(int argc, char* argv[], char* arge[]) {
     dgramTest(fd);
 #endif
 
-    // assert(0 == nacl_io_uninit());
+#if KI
+    ki_uninit();
+#endif
+
+#if NACL_IO
+    assert(0 == nacl_io_uninit());
+#endif
 
     return 0;
 }

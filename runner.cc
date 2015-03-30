@@ -22,7 +22,7 @@
 // #endif
 
 #if GDB
-#warning GDB turned on
+#warning GDB hooks turned on
 #endif
 
 
