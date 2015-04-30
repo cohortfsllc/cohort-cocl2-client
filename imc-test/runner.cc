@@ -10,37 +10,22 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+const int TOKEN_MAX_LEN = 128;
+#define SEL_LDR_PATH_TOKEN "SEL_LDR_PATH_TOKEN"
+#define IRT_PATH_TOKEN "IRT_PATH_TOKEN"
+#define NEXE_PATH_TOKEN "NEXE_PATH_TOKEN"
+// #define BOOTSTRAP_SOCKET_ADDR_TOKEN "BOOTSTRAP_SOCKET_ADDR_TOKEN"
+const char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
 
-#if !SHM_TEST && !STREAM_TEST && !DGRAM_TEST && !SRPC_TEST
-#error must define either SHM_TEST, STREAM_TEST, DGRAM_TEST, or SRPC_TEST
-#endif
-
-// define one of STREAM_TEST, DGRAM_TEST, SRPC_TEST
-// #if !defined(STREAM_TEST) && !defined(DGRAM_TEST) &&  \
-//     !defined(SRPC_TEST) && !defined(SHM_TEST)
-// #error must define either STREAM_TEST, DGRAM_TEST, or SRPC_TEST
-// #endif
 
 #if GDB
 #warning GDB hooks turned on
 #endif
 
 
-const char* socketTypeDesc(int socket_type) {
-    switch(socket_type) {
-    case SOCK_SEQPACKET:
-        return "sequential packet";
-    case SOCK_STREAM:
-        return "stream";
-    case SOCK_DGRAM:
-        return "datagram";
-    default:
-        return "UNKNOWN";
-    }
-}
-
-char* const cmd_vec[] = {
-    "/home/ivancich/CoCl2/nacl2/native_client/scons-out/dbg-linux-x86-64/staging/sel_ldr",
+const char* cmd_vec[] = {
+    "/home/ivancich/CoCl2/"
+    "native_client/native_client/scons-out/dbg-linux-x86-64/staging/sel_ldr"
 #if GDB
     "-c", // debug_mode_ignore_validator
     // "-c", // repeating skips entirely
@@ -50,32 +35,32 @@ char* const cmd_vec[] = {
     "-Q", // skip_qualification
     // "-v", // verbosity
     "-B",
-    "/home/ivancich/CoCl2/nacl/native_client/scons-out/nacl_irt-x86-64/"
-    "staging/irt_core.nexe",
-#if STREAM_TEST || DGRAM_TEST
-    "-h",
-    "5:3",
-#elif SHM_TEST
-    "-i",
-    "5:3", // nacl_desc = 5, u.handle = 3, tag = IMC_DESC
-#elif SRPC_TEST
-    "-i",
-    "5:3", // nacl_desc = 5, u.handle = 3, tag = IMC_DESC
-    "-X",
-    "3", // export_addr_to = 3
-#endif
-    "-Eann=arbor",
+    "/home/ivancich/CoCl2/"
+    "native_client/native_client/scons-out/"
+    "nacl_irt-x86-64/staging/irt_core.nexe"
+    "-Ecity=ann_arbor", // example of setting environment variable
     "--",
-    "/home/ivancich/CoCl2/my-tests/message_test_client_x86_64.nexe",
-    "It's a",
-    "Wonderful",
-    "Life!",
-    NULL
+    NEXE_PATH_TOKEN,
+    BOOTSTRAP_SOCKET_ADDR_TOKEN,
+    NULL,
 };
 
 
+void replaceToken(const char** const token_list,
+                  const char* token,
+                  const char* value) {
+    const char** cursor = token_list;
+    while (NULL != *cursor) {
+        if (0 == strncmp(token, *cursor, TOKEN_MAX_LEN)) {
+            *cursor = value;
+        }
+        ++cursor;
+    }
+}
+
+
 void displayCommandLine() {
-    for (char* const* cursor = cmd_vec; NULL != *cursor; ++cursor) {
+    for (char const* const* cursor = cmd_vec; NULL != *cursor; ++cursor) {
         if (cursor != cmd_vec) printf("    ");
         printf("%s\n", *cursor);
     }
@@ -181,7 +166,36 @@ void serverReadAllChars() {
 }
 
 
+#if 0
 int setUpFork(int socket_type, pid_t& child, int& server_fd) {
+    int fds[2];
+    assert(0 == socketpair(AF_UNIX, socket_type, 0, fds));
+    std::cout << "socket pair is type " << socketTypeDesc(socket_type) <<
+        "; fds: " << fds[0] << " / " << fds[1] << std::endl;
+
+    if (!(child = fork())) {
+        // child code
+        assert(0 == close(fds[1]));
+        std::cout << "client closed " << fds[1] << std::endl;
+        displayCommandLine();
+        execvp(cmd_vec[0], cmd_vec);
+        return 0; // never executed
+    }
+
+    std::cout << "child pid is " << child << std::endl;
+
+    assert(0 == close(fds[0]));
+    std::cout << "server closed " << fds[0] << std::endl;
+
+    server_fd = fds[1];
+    std::cout << "server will use " << server_fd << std::endl;
+
+    return 0;
+}
+#endif
+
+
+int setUpForkWithBoundSocket(pid_t& child, int& server_fd) {
     int fds[2];
     assert(0 == socketpair(AF_UNIX, socket_type, 0, fds));
     std::cout << "socket pair is type " << socketTypeDesc(socket_type) <<
@@ -313,18 +327,20 @@ void dgramTest(pid_t &child_pid) {
 
 
 int main(int argc, char* argv[]) {
-    pid_t child_pid;
-#if SRPC_TEST
-    srpcTest(child_pid);
-#elif SHM_TEST
-    sharedMemoryTest(child_pid);
-#elif STREAM_TEST
-    streamTest(child_pid);
-#elif DGRAM_TEST
-    dgramTest(child_pid);
-#else
-#error Something not defined.
-#endif
+    if (4 != argc) {
+        std::cerr << "Usage: " << argv[0] <<
+            " sel_ldr-path irt-path nexe-path" << std::endl;
+        exit(1);
+    }
+
+    const char* sel_ldr_path = argv[1];
+    const char* irt_path = argv[2];
+    // const char const * nexe_path = argv[3];
+    const char* nexe_path = "imc_test_client_x86_64.nexe";
+
+    replaceToken(cmd_vec, NEXE_PATH_TOKEN, nexe_path);
+    
+    createAndTestBootstrap();
 
     std::cout << "server is waiting..." << std::endl;
     int status;

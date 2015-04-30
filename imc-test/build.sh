@@ -9,7 +9,10 @@ export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 GDB=-DGDB=1
 
 echo compiling runner
-# g++ -g $GDB $TEST -o runner -std=c++11 -Wno-write-strings runner.cc
+g++ -g $GDB $TEST -o runner -std=c++11 -Wno-write-strings runner.cc
+
+echo finishing with runner
+exit 2
 
 exit_on_error() {
     if [ $? -ne 0 ] ;then
