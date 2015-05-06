@@ -2,3 +2,5 @@
 *.pexe
 *.nexe
 runner
+cscope.*
+key-files

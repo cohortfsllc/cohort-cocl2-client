@@ -1,0 +1,11 @@
+file ~/sel_ldr
+target remote :4014
+
+# break NaClSelLdrMain
+# list NaClSelLdrMain
+# break sel_main.c:RedirectIO
+# tbreak sel_main.c:721
+# break sel_ldr.c:NaClSetUpBootstrapChannel
+# break nrd_xfer.c:NaClImcSendTypedMessage
+# break nacl_desc_imc.c:NaClDescImcDescLowLevelSendMsg
+# break nacl_imc.cc:NaClSendDatagram
