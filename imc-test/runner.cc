@@ -1,21 +1,28 @@
 #include <iostream>
-#include <string>
-#include <vector>
+// #include <string>
+// #include <vector>
 
 #include <unistd.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <assert.h>
 #include <string.h>
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
+// #include "native_client/src/trusted/desc/nrd_desc_imc.h"
+// #include "native_client/src/trusted/desc/nrd_xfer.h"
+
+
+const int IMC_HANDLE = 12;
+
+
 const int TOKEN_MAX_LEN = 128;
-#define SEL_LDR_PATH_TOKEN "SEL_LDR_PATH_TOKEN"
-#define IRT_PATH_TOKEN "IRT_PATH_TOKEN"
-#define NEXE_PATH_TOKEN "NEXE_PATH_TOKEN"
-// #define BOOTSTRAP_SOCKET_ADDR_TOKEN "BOOTSTRAP_SOCKET_ADDR_TOKEN"
-const char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
+char* SEL_LDR_PATH_TOKEN = "SEL_LDR_PATH_TOKEN";
+char* IRT_PATH_TOKEN = "IRT_PATH_TOKEN";
+char* NEXE_PATH_TOKEN = "NEXE_PATH_TOKEN";
+char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
+char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
 
 
 #if GDB
@@ -23,21 +30,20 @@ const char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
 #endif
 
 
-const char* cmd_vec[] = {
-    "/home/ivancich/CoCl2/"
-    "native_client/native_client/scons-out/dbg-linux-x86-64/staging/sel_ldr"
+char* cmd_vec[] = {
+    SEL_LDR_PATH_TOKEN,
 #if GDB
     "-c", // debug_mode_ignore_validator
     // "-c", // repeating skips entirely
     "-d", // debug_mode_startup_signal
     "-g", // enable_debug_stub
 #endif
-    "-Q", // skip_qualification
+    // "-Q", // skip_qualification
+    "-i",
+    IMC_FD_TOKEN, // IMC handle : socket_addr
     // "-v", // verbosity
     "-B",
-    "/home/ivancich/CoCl2/"
-    "native_client/native_client/scons-out/"
-    "nacl_irt-x86-64/staging/irt_core.nexe"
+    IRT_PATH_TOKEN,
     "-Ecity=ann_arbor", // example of setting environment variable
     "--",
     NEXE_PATH_TOKEN,
@@ -46,10 +52,10 @@ const char* cmd_vec[] = {
 };
 
 
-void replaceToken(const char** const token_list,
+void replaceToken(char** token_list,
                   const char* token,
-                  const char* value) {
-    const char** cursor = token_list;
+                  char* value) {
+    char** cursor = token_list;
     while (NULL != *cursor) {
         if (0 == strncmp(token, *cursor, TOKEN_MAX_LEN)) {
             *cursor = value;
@@ -67,6 +73,7 @@ void displayCommandLine() {
 }
 
 
+#if 0
 void sendDgram(const int fd, const char* msg) {
     struct msghdr header;
 
@@ -86,6 +93,7 @@ void sendDgram(const int fd, const char* msg) {
 
     std::cout << "server sent message of length " << len_out << std::endl;
 }
+#endif
 
 
 int receiveMessage(const int fd,
@@ -122,6 +130,7 @@ int receiveMessage(const int fd,
 }
 
 
+#if 0
 void exchangeMessages(const int fd) {
     struct msghdr header_out;
 
@@ -149,6 +158,7 @@ void exchangeMessages(const int fd) {
 
     std::cout << "runner received message of length " << len_in << std::endl;
 }
+#endif
 
 
 void serverReadAllChars() {
@@ -195,33 +205,109 @@ int setUpFork(int socket_type, pid_t& child, int& server_fd) {
 #endif
 
 
-int setUpForkWithBoundSocket(pid_t& child, int& server_fd) {
-    int fds[2];
-    assert(0 == socketpair(AF_UNIX, socket_type, 0, fds));
-    std::cout << "socket pair is type " << socketTypeDesc(socket_type) <<
-        "; fds: " << fds[0] << " / " << fds[1] << std::endl;
+struct ConnectionArgs {
+    int socket_fd;
+};
 
-    if (!(child = fork())) {
-        // child code
-        assert(0 == close(fds[1]));
-        std::cout << "client closed " << fds[1] << std::endl;
-        displayCommandLine();
-        execvp(cmd_vec[0], cmd_vec);
-        return 0; // never executed
+
+void* handleConnection(void* arg) {
+    std::cout << "In thread to receive messages." << std::endl;
+
+    int socket_fd = ((struct ConnectionArgs*) arg)->socket_fd;
+    free(arg);
+
+#define CONN_BUFF_LEN 64
+    char buffer[CONN_BUFF_LEN];
+    int control[32];
+
+    int buffer_len = CONN_BUFF_LEN;
+    int control_len = 32 * sizeof(int);
+
+    for (int count = 0; count < 2; count++) {
+        int length = receiveMessage(socket_fd,
+                                    buffer, buffer_len,
+                                    control, control_len);
+
+        std::cout << "handleConnection received message of length " <<
+            length << std::endl;
+
+        for (int i = 16; i < length; ++i) {
+            printf("%d: %hhu %c\n", i, (unsigned char) buffer[i], buffer[i]);
+        }
     }
 
-    std::cout << "child pid is " << child << std::endl;
+    return NULL; // thread exits
+}
 
-    assert(0 == close(fds[0]));
-    std::cout << "server closed " << fds[0] << std::endl;
 
-    server_fd = fds[1];
-    std::cout << "server will use " << server_fd << std::endl;
+int acceptConnections(const int socket_fd, pthread_t& thread_id) {
+    int fd = accept(socket_fd, NULL, NULL);
+    assert(fd >= 0);
+
+    struct ConnectionArgs* conn_args =
+        (struct ConnectionArgs *) malloc(sizeof(struct ConnectionArgs));
+    conn_args->socket_fd = fd;
+
+    int rv = pthread_create(&thread_id, NULL, handleConnection, conn_args);
+    assert(0 == rv);
 
     return 0;
 }
 
 
+int receiveMessages(const int socket_fd, pthread_t& thread_id) {
+    struct ConnectionArgs* conn_args =
+        (struct ConnectionArgs *) malloc(sizeof(struct ConnectionArgs));
+    conn_args->socket_fd = socket_fd;
+
+    int rv = pthread_create(&thread_id, NULL, handleConnection, conn_args);
+    assert(0 == rv);
+
+    std::cout << "Thread created to receive messages." << std::endl;
+
+    return 0;
+}
+
+
+// ++++++
+int forkWithBoundSocket(pthread_t& thread_id, pid_t& child) {
+    int rv;
+    int bound_pair[2];
+
+    rv = socketpair(AF_UNIX, SOCK_SEQPACKET, 0, bound_pair);
+    assert(rv == 0);
+
+    const int socket_fd = bound_pair[0];
+    const int socket_addr = bound_pair[1];
+
+    // rv = acceptConnections(socket_fd, thread_id);
+    rv = receiveMessages(socket_fd, thread_id);
+    assert(rv == 0);
+
+    char imc_fd_str[128];
+    assert(snprintf(imc_fd_str, 128, "%d:%d", IMC_HANDLE, socket_addr) > 0);
+
+    char socket_addr_str[128];
+    assert(snprintf(socket_addr_str, 128, "%d", IMC_HANDLE) > 0);
+
+    if (!(child = fork())) {
+        // child code
+        replaceToken(cmd_vec, IMC_FD_TOKEN, imc_fd_str);
+        replaceToken(cmd_vec, BOOTSTRAP_SOCKET_ADDR_TOKEN, socket_addr_str);
+        displayCommandLine();
+        int rv = execvp(cmd_vec[0], cmd_vec);
+        perror("execvp returned when it should not have");
+        return -1; // never executed
+    }
+
+    // server code
+    std::cout << "child pid is " << child << std::endl;
+
+    return 0;
+}
+
+
+#if 0
 int setUpSrpc(pid_t& child, int& bound_fd) {
     int server_fd = -1;
     int socket_type = SOCK_SEQPACKET;
@@ -324,6 +410,7 @@ void dgramTest(pid_t &child_pid) {
     
     // exchangeMessages(fds[0], fds[1]);
 }
+#endif
 
 
 int main(int argc, char* argv[]) {
@@ -333,18 +420,32 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    const char* sel_ldr_path = argv[1];
-    const char* irt_path = argv[2];
-    // const char const * nexe_path = argv[3];
-    const char* nexe_path = "imc_test_client_x86_64.nexe";
+    int rv;
 
+    char* sel_ldr_path = argv[1];
+    char* irt_path = argv[2];
+    // const char const * nexe_path = argv[3];
+    char* nexe_path = "imc_test_client_x86_64.nexe";
+
+    replaceToken(cmd_vec, SEL_LDR_PATH_TOKEN, sel_ldr_path);
+    replaceToken(cmd_vec, IRT_PATH_TOKEN, irt_path);
     replaceToken(cmd_vec, NEXE_PATH_TOKEN, nexe_path);
-    
-    createAndTestBootstrap();
+
+    pthread_t thread_id;
+    pid_t child_pid;
+
+    rv = forkWithBoundSocket(thread_id, child_pid);
+    assert(0 == rv);
+
+    std::cout << "server is waiting for thread to join..." << std::endl;
+    rv = pthread_join(thread_id, NULL);
+    std::cout << "...thread joined" << std::endl;
+    assert(0 == rv);
 
     std::cout << "server is waiting..." << std::endl;
     int status;
-    waitpid(child_pid, &status, 0);
+    pid_t pid_rv = waitpid(child_pid, &status, 0);
+    assert(pid_rv == child_pid);
 
     std::cout << "Child exiting with status " << status << std::endl;
 

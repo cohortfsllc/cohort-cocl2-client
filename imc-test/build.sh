@@ -1,18 +1,19 @@
 #!/bin/sh
 
-sdk=${HOME}/CoCl2/nacl_sdk/pepper_40
-nacl=${HOME}/CoCl2/native_client
-nacl_incl=${HOME}/CoCl2/native_client/native_client/src/include
+sdk="${HOME}/CoCl2/nacl_sdk/pepper_40"
+nacl="${HOME}/CoCl2/native_client"
+# nacl_incl="${HOME}/CoCl2/native_client/native_client/src/include"
+nacl_incl="${HOME}/CoCl2/native_client"
+# nacl_lib="${HOME}/CoCl2/native_client/native_client/scons-out/nacl-x86-64/lib"
+nacl_lib="${HOME}/CoCl2/native_client/native_client/scons-out/dbg-linux-x86-64/lib"
 export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 
 # comment out to remove runtime gdb hooks
-GDB=-DGDB=1
+# GDB=-DGDB=1
 
 echo compiling runner
-g++ -g $GDB $TEST -o runner -std=c++11 -Wno-write-strings runner.cc
-
-echo finishing with runner
-exit 2
+g++ -g $GDB -o runner -pthread -std=c++11 -Wno-write-strings runner.cc
+# g++ -g $GDB -I${nacl_incl} -L${nacl_lib} -o runner -pthread -limc -std=c++11 -Wno-write-strings runner.cc
 
 exit_on_error() {
     if [ $? -ne 0 ] ;then
