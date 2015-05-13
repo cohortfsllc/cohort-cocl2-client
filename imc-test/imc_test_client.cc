@@ -6,7 +6,37 @@
 #include <irt_dev.h>
 #include "irt_cocl2.h"
 
-// #include "nacl/nacl_imc_c.h"
+
+const int stack_size_hint = 64;
+
+
+int shutdown(void) {
+    return 0;
+}
+
+
+int alloc_shared_mem(unsigned size,
+                     int* mem_handle) {
+    return 0;
+}
+
+int free_shared_mem(int handle) {
+    return 0;
+}
+
+int compute_osds(const uuid_opaque volume_uuid,
+                 const char* obj_name,
+                 int* osd_list,
+                 int osd_count) {
+    return 0;
+}
+
+struct cocl2_interface my_cocl2_interface = {
+    shutdown,
+    alloc_shared_mem,
+    free_shared_mem,
+    compute_osds,
+};
 
 
 // NULL error, otherwise valid
@@ -58,30 +88,6 @@ int test_proof_of_concept(const struct nacl_irt_cocl2* cocl2) {
 
 
 // 0 success, non-zero error
-int test_the_getpid(const struct nacl_irt_dev_getpid* getpid) {
-    int pid = -1;
-    int result = getpid->getpid(&pid);
-    
-    std::cout << "The result *the* getpid is " << result <<
-        " and the pid is " << pid << "." << std::endl;
-
-    return 0;
-}
-
-
-// 0 success, non-zero error
-int test_my_getpid(const struct nacl_irt_cocl2* cocl2) {
-    int pid = -1;
-    int result = cocl2->cocl2_getpid(&pid);
-    
-    std::cout << "The result cocl2_getpid is " << result <<
-        " and the pid is " << pid << "." << std::endl;
-
-    return 0;
-}
-
-
-// 0 success, non-zero error
 int test_my_gettod(const struct nacl_irt_cocl2* cocl2) {
     int result;
     struct timeval tval;
@@ -124,9 +130,13 @@ int test_time(const struct nacl_irt_basic* basic, int count) {
 }
 
 
+
 int test_cocl2_init(const struct nacl_irt_cocl2* cocl2,
                     const int bootstrap_socket_addr) {
-    int result = cocl2->cocl2_init(bootstrap_socket_addr);
+    int result = cocl2->cocl2_init(bootstrap_socket_addr,
+                                   "imc_test_client",
+                                   stack_size_hint,
+                                   &my_cocl2_interface);
     std::cout << "The result of cocl2_init is " << result << std::endl;
     return result;
 }
@@ -153,24 +163,17 @@ int main(int argc, char* argv[]) {
             query_interface<struct nacl_irt_basic>(NACL_IRT_BASIC_v0_1);
 
         check_result("time", test_time(basic, 1));
-
-        const struct nacl_irt_dev_getpid* getpid =
-            query_interface<struct nacl_irt_dev_getpid>(NACL_IRT_DEV_GETPID_v0_1);
-
-        check_result("the getpid", test_the_getpid(getpid));
 #endif
 
         const struct nacl_irt_cocl2* cocl2 =
             query_interface<struct nacl_irt_cocl2>(NACL_IRT_COCL2_v0_1);
 
         check_result("proof-of-concept", test_proof_of_concept(cocl2));
-        // check_result("my_getpid", test_my_getpid(cocl2));
         // check_result("my_gettod", test_my_gettod(cocl2));
         check_result("my_cocl2_init",
                      test_cocl2_init(cocl2, bootstrap_socket_addr));
       
         delete cocl2;
-        // delete getpid;
         // delete basic;
     }
 
