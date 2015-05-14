@@ -46,6 +46,7 @@ char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
 
 char* cmd_vec[] = {
     SEL_LDR_PATH_TOKEN,
+    "-a", // allow file access plus some other syscalls
 #if GDB
     "-c", // debug_mode_ignore_validator
     // "-c", // repeating skips entirely
@@ -87,9 +88,10 @@ void displayCommandLine() {
 }
 
 
-void printBuffer(char* buffer, int buffer_len, int skip = 0) {
+void printBuffer(void* buffer, int buffer_len, int skip = 0) {
+    char* b = (char*) buffer;
     for (int i = skip; i < buffer_len; ++i) {
-        printf("%d: %hhu %c\n", i, (unsigned char) buffer[i], buffer[i]);
+        printf("%d: %hhu %c\n", i, (unsigned char) b[i], b[i]);
     }
 }
 
@@ -249,12 +251,14 @@ void* handleConnection(void* arg) {
         std::cout << "handleConnection received message of length " <<
             length << std::endl;
 
-        printBuffer(buffer, length, 16);
+        printBuffer(buffer, length);
+        // printBuffer(buffer, length, 16);
 
         std::cout << "handleConnection received " << control_len <<
             " fds" << std::endl;
 
         if (control_len > 0) {
+            printBuffer(control, control_len);
             createTesterThread(control[0]);
         }
     }
