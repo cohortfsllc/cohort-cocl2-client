@@ -14,12 +14,21 @@
 // #include "native_client/src/trusted/desc/nrd_xfer.h"
 
 
-struct ConnectionArgs {
+
+struct RegistrationArgs {
     int socket_fd;
 };
 
 
+struct TesterArgs {
+    int placer_fd;
+};
+
+
 const int IMC_HANDLE = 12;
+#define CONN_BUFF_LEN 64
+#define RETURN_BUFF_LEN 2048
+#define CONTROL_LEN 8
 
 
 const int TOKEN_MAX_LEN = 128;
@@ -78,6 +87,13 @@ void displayCommandLine() {
 }
 
 
+void printBuffer(char* buffer, int buffer_len, int skip = 0) {
+    for (int i = skip; i < buffer_len; ++i) {
+        printf("%d: %hhu %c\n", i, (unsigned char) buffer[i], buffer[i]);
+    }
+}
+
+
 int receiveMessage(const int fd,
                    void* buff, int& buff_len,
                    void* control, int& control_len) {
@@ -112,6 +128,31 @@ int receiveMessage(const int fd,
 }
 
 
+int sendMessage(const int fd,
+                void* buff, int buff_len,
+                void* control, int control_len) {
+    struct msghdr header;
+
+    struct iovec message[1];
+    message[0].iov_base = buff;
+    message[0].iov_len = buff_len;
+    
+    header.msg_name = NULL;
+    header.msg_namelen = 0;
+    header.msg_iov = message;
+    header.msg_iovlen = 1;
+    header.msg_control = control;
+    header.msg_controllen = control_len;
+    header.msg_flags = 0;
+
+    int len_out = sendmsg(fd, &header, 0);
+    if (len_out < 0) {
+        perror("server sendmsg error");
+    }
+
+    return len_out;
+}
+
 
 void serverReadAllChars() {
     int count = 0;
@@ -128,32 +169,93 @@ void serverReadAllChars() {
 }
 
 
+// runs in its own thread
+void* testConnection(void* arg) {
+    int rv;
+    int socket_fd = ((struct TesterArgs*) arg)->placer_fd;
+    free(arg);
+
+    struct sockaddr socket_addr;
+    socklen_t socket_addr_len;
+
+    rv = getsockname(socket_fd, &socket_addr, &socket_addr_len);
+    assert(0 == rv);
+
+    int comm_sock = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    assert(comm_sock >= 0);
+    
+    char* message = "Hello, Planet!";
+    int message_len = 1 + strlen(message);
+
+    rv = connect(comm_sock, &socket_addr, socket_addr_len);
+    assert(0 == rv);
+
+    int sent_len = sendMessage(comm_sock, message, message_len, NULL, 0);
+    std::cout << "sendMessage sent message of length " << sent_len <<
+        " expecting a value of " << message_len << std::endl;
+
+
+
+    char buff[RETURN_BUFF_LEN];
+    int control[CONTROL_LEN];
+
+    int buff_len = RETURN_BUFF_LEN;
+    int control_len = CONTROL_LEN * sizeof(int);
+
+    int recv_len =
+        receiveMessage(comm_sock, buff, buff_len, control, control_len);
+    std::cout << "receiveMessage sent message of length " << recv_len <<
+        " with control length of " << control_len << std::endl;
+
+    printBuffer(buff, buff_len);
+
+    return NULL;
+}
+
+
+int createTesterThread(int placement_fd) {
+    struct TesterArgs* tester_args =
+        (struct TesterArgs *) malloc(sizeof(struct TesterArgs));
+    tester_args->placer_fd = placement_fd;
+
+    pthread_t thread_id;
+
+    int rv = pthread_create(&thread_id, NULL, testConnection, tester_args);
+    assert(0 == rv);
+
+    std::cout << "Thread created to test placer." << std::endl;
+
+    return 0;
+}
 
 
 // runs in a separate thread
 void* handleConnection(void* arg) {
     std::cout << "In thread to receive messages." << std::endl;
 
-    int socket_fd = ((struct ConnectionArgs*) arg)->socket_fd;
+    int socket_fd = ((struct RegistrationArgs*) arg)->socket_fd;
     free(arg);
 
-#define CONN_BUFF_LEN 64
     char buffer[CONN_BUFF_LEN];
-    int control[32];
+    int control[CONTROL_LEN];
 
     int buffer_len = CONN_BUFF_LEN;
-    int control_len = 32 * sizeof(int);
+    int control_len = CONTROL_LEN * sizeof(int);
 
-    for (int count = 0; count < 2; count++) {
+    while(1) {
         int length = receiveMessage(socket_fd,
                                     buffer, buffer_len,
                                     control, control_len);
-
         std::cout << "handleConnection received message of length " <<
             length << std::endl;
 
-        for (int i = 16; i < length; ++i) {
-            printf("%d: %hhu %c\n", i, (unsigned char) buffer[i], buffer[i]);
+        printBuffer(buffer, length, 16);
+
+        std::cout << "handleConnection received " << control_len <<
+            " fds" << std::endl;
+
+        if (control_len > 0) {
+            createTesterThread(control[0]);
         }
     }
 
@@ -161,12 +263,14 @@ void* handleConnection(void* arg) {
 }
 
 
-int acceptConnections(const int socket_fd, pthread_t& thread_id) {
+
+
+int acceptConnectionsNotUsed(const int socket_fd, pthread_t& thread_id) {
     int fd = accept(socket_fd, NULL, NULL);
     assert(fd >= 0);
 
-    struct ConnectionArgs* conn_args =
-        (struct ConnectionArgs *) malloc(sizeof(struct ConnectionArgs));
+    struct RegistrationArgs* conn_args =
+        (struct RegistrationArgs *) malloc(sizeof(struct RegistrationArgs));
     conn_args->socket_fd = fd;
 
     int rv = pthread_create(&thread_id, NULL, handleConnection, conn_args);
@@ -177,8 +281,8 @@ int acceptConnections(const int socket_fd, pthread_t& thread_id) {
 
 
 int createMessagesThread(const int socket_fd, pthread_t& thread_id) {
-    struct ConnectionArgs* conn_args =
-        (struct ConnectionArgs *) malloc(sizeof(struct ConnectionArgs));
+    struct RegistrationArgs* conn_args =
+        (struct RegistrationArgs *) malloc(sizeof(struct RegistrationArgs));
     conn_args->socket_fd = socket_fd;
 
     int rv = pthread_create(&thread_id, NULL, handleConnection, conn_args);
@@ -226,11 +330,6 @@ int forkWithBoundSocket(pthread_t& thread_id, pid_t& child_pid) {
 
     return 0;
 }
-
-
-
-
-
 
 
 int main(int argc, char* argv[]) {
