@@ -10,9 +10,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-// #include "native_client/src/trusted/desc/nrd_desc_imc.h"
-// #include "native_client/src/trusted/desc/nrd_xfer.h"
-
+#include "cocl2_bridge.h"
 
 
 struct RegistrationArgs {
@@ -28,7 +26,7 @@ struct TesterArgs {
 const int IMC_HANDLE = 12;
 #define CONN_BUFF_LEN 64
 #define RETURN_BUFF_LEN 2048
-#define CONTROL_LEN 8
+#define CONTROL_LEN 32
 
 
 const int TOKEN_MAX_LEN = 128;
@@ -177,20 +175,29 @@ void* testConnection(void* arg) {
     int socket_fd = ((struct TesterArgs*) arg)->placer_fd;
     free(arg);
 
+    /*
+
     struct sockaddr socket_addr;
     socklen_t socket_addr_len;
 
     rv = getsockname(socket_fd, &socket_addr, &socket_addr_len);
     assert(0 == rv);
 
+    std::cout << "Socket address of length " << socket_addr_len << std::endl;
+    printBuffer(&socket_addr, socket_addr_len);
+
     int comm_sock = socket(AF_UNIX, SOCK_SEQPACKET, 0);
     assert(comm_sock >= 0);
     
-    char* message = "Hello, Planet!";
-    int message_len = 1 + strlen(message);
-
     rv = connect(comm_sock, &socket_addr, socket_addr_len);
     assert(0 == rv);
+
+    */
+
+    int comm_sock = socket_fd;
+
+    char* message = "Hello, Planet!";
+    int message_len = 1 + strlen(message);
 
     int sent_len = sendMessage(comm_sock, message, message_len, NULL, 0);
     std::cout << "sendMessage sent message of length " << sent_len <<
@@ -231,6 +238,21 @@ int createTesterThread(int placement_fd) {
 }
 
 
+void handleMessage(char buffer[], int buffer_len,
+                   int control[], int control_len) {
+    if (!strncmp("REGISTER", buffer, 8)) {
+        char* name = buffer + 8 + 1;
+        std::cout << "Found placement algorithm with name " <<
+            name << std::endl;
+        std::cout << "File descriptor number " << control[4] <<
+            " found" << std::endl;
+        createTesterThread(control[4]);
+    } else {
+        std::cerr << "No valid message found." << std::endl;
+    }
+}
+
+
 // runs in a separate thread
 void* handleConnection(void* arg) {
     std::cout << "In thread to receive messages." << std::endl;
@@ -251,15 +273,31 @@ void* handleConnection(void* arg) {
         std::cout << "handleConnection received message of length " <<
             length << std::endl;
 
-        printBuffer(buffer, length);
-        // printBuffer(buffer, length, 16);
+        int offset = -1;
+        for (int i ; i < length + COCL2_BANNER_LEN; i += 16) {
+            if (!memcmp(COCL2_BANNER, &buffer[i], COCL2_BANNER_LEN)) {
+                offset = i;
+                break;
+            }
+        }
 
-        std::cout << "handleConnection received " << control_len <<
-            " fds" << std::endl;
+        if (offset >= 0) {
+            handleMessage(buffer + offset + COCL2_BANNER_LEN,
+                          length - offset - COCL2_BANNER_LEN,
+                          control,
+                          control_len);
+        } else {
+            std::cerr << "No embedded message found." << std::endl;
 
-        if (control_len > 0) {
-            printBuffer(control, control_len);
-            createTesterThread(control[0]);
+            printBuffer(buffer, length);
+
+            std::cerr << "handleConnection received " << control_len <<
+                " fds" << std::endl;
+
+            if (control_len > 0) {
+                printBuffer(control, control_len);
+                // createTesterThread(control[0]);
+            }
         }
     }
 
@@ -309,7 +347,6 @@ int forkWithBoundSocket(pthread_t& thread_id, pid_t& child_pid) {
     const int socket_fd = bound_pair[0];
     const int socket_addr = bound_pair[1];
 
-    // rv = acceptConnections(socket_fd, thread_id);
     rv = createMessagesThread(socket_fd, thread_id);
     assert(rv == 0);
 
