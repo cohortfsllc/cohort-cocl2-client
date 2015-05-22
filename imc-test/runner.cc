@@ -170,53 +170,37 @@ void serverReadAllChars() {
 
 
 // runs in its own thread
-void* testConnection(void* arg) {
+void* testConnection(void* args) {
     int rv;
-    int socket_fd = ((struct TesterArgs*) arg)->placer_fd;
-    free(arg);
+    int socket_fd = ((struct TesterArgs*) args)->placer_fd;
+    free(args);
 
-    /*
+    char message_buff[1024];
 
-    struct sockaddr socket_addr;
-    socklen_t socket_addr_len;
+    for (int i = 0; i < 4; ++i) {
+        snprintf(message_buff, 1024, "Hello Planet %d %d %d!", i, i, i);
+        int message_len = 1 + strlen(message_buff);
 
-    rv = getsockname(socket_fd, &socket_addr, &socket_addr_len);
-    assert(0 == rv);
-
-    std::cout << "Socket address of length " << socket_addr_len << std::endl;
-    printBuffer(&socket_addr, socket_addr_len);
-
-    int comm_sock = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-    assert(comm_sock >= 0);
-    
-    rv = connect(comm_sock, &socket_addr, socket_addr_len);
-    assert(0 == rv);
-
-    */
-
-    int comm_sock = socket_fd;
-
-    char* message = "Hello, Planet!";
-    int message_len = 1 + strlen(message);
-
-    int sent_len = sendMessage(comm_sock, message, message_len, NULL, 0);
-    std::cout << "sendMessage sent message of length " << sent_len <<
-        " expecting a value of " << message_len << std::endl;
+        int sent_len = sendMessage(socket_fd,
+                                   message_buff, message_len,
+                                   NULL, 0);
+        std::cout << "sendMessage sent message of length " << sent_len <<
+            " expecting a value of " << message_len << std::endl;
 
 
+        char buff[RETURN_BUFF_LEN];
+        int control[CONTROL_LEN];
 
-    char buff[RETURN_BUFF_LEN];
-    int control[CONTROL_LEN];
+        int buff_len = RETURN_BUFF_LEN;
+        int control_len = CONTROL_LEN * sizeof(int);
 
-    int buff_len = RETURN_BUFF_LEN;
-    int control_len = CONTROL_LEN * sizeof(int);
+        int recv_len =
+            receiveMessage(socket_fd, buff, buff_len, control, control_len);
+        std::cout << "receiveMessage sent message of length " << recv_len <<
+            " with control length of " << control_len << std::endl;
 
-    int recv_len =
-        receiveMessage(comm_sock, buff, buff_len, control, control_len);
-    std::cout << "receiveMessage sent message of length " << recv_len <<
-        " with control length of " << control_len << std::endl;
-
-    printBuffer(buff, buff_len);
+        printBuffer(buff, recv_len);
+    } // for loop X 4
 
     return NULL;
 }
@@ -224,7 +208,7 @@ void* testConnection(void* arg) {
 
 int createTesterThread(int placement_fd) {
     struct TesterArgs* tester_args =
-        (struct TesterArgs *) malloc(sizeof(struct TesterArgs));
+        (struct TesterArgs *) calloc(sizeof(struct TesterArgs), 1);
     tester_args->placer_fd = placement_fd;
 
     pthread_t thread_id;
@@ -246,7 +230,8 @@ void handleMessage(char buffer[], int buffer_len,
             name << std::endl;
         std::cout << "File descriptor number " << control[4] <<
             " found" << std::endl;
-        createTesterThread(control[4]);
+        int rv = createTesterThread(control[4]);
+        assert(0 == rv);
     } else {
         std::cerr << "No valid message found." << std::endl;
     }
