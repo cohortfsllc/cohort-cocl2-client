@@ -4,3 +4,4 @@
 runner
 cscope.*
 key-files
+nacl-gdb.cmds
