@@ -7,7 +7,7 @@
 #include "irt_cocl2.h"
 
 
-const int stack_size_hint = 64;
+const int stack_size_hint = 128 * 1024; // 128K
 
 
 int shutdown(void) {
