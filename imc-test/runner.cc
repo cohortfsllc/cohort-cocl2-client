@@ -142,11 +142,12 @@ void printBuffer(void* buffer, int buffer_len, int skip = 0) {
 
 
 int my_execv(std::string exec_path, std::vector<std::string> cmd_vec) {
-    char** cmd_ary = new char*[cmd_vec.size()];
+    char** cmd_ary = new char*[1 + cmd_vec.size()];
     for (int i = 0; i < cmd_vec.size(); ++i) {
         cmd_ary[i] = new char[1 + cmd_vec[i].length()];
         strcpy(cmd_ary[i], cmd_vec[i].c_str());
     }
+    cmd_ary[cmd_vec.size()] = NULL;
 
     displayCommandLine(cmd_ary);
 
