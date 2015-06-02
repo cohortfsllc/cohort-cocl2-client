@@ -13,4 +13,4 @@ EOF
 
 set -x
 # ${sel_ldr} -B ${irt} -- ${nexe}
-./runner $sel_ldr $irt $nexe
+./runner -s $sel_ldr -i $irt -n $nexe "$@"

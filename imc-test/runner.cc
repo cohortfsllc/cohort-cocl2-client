@@ -1,7 +1,9 @@
 #include <iostream>
-// #include <string>
-// #include <vector>
+#include <string>
+#include <vector>
+#include <algorithm>
 
+#include <errno.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <assert.h>
@@ -37,12 +39,7 @@ char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
 char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
 
 
-#if GDB
-#warning GDB hooks turned on
-#endif
-
-
-char* cmd_vec[] = {
+char* cmd_vec2[] = {
     SEL_LDR_PATH_TOKEN,
     "-a", // allow file access plus some other syscalls
 #if GDB
@@ -65,6 +62,34 @@ char* cmd_vec[] = {
 };
 
 
+
+/*
+ * The next two functions are for simplified command line argument
+ * parsing. See:
+ * http://stackoverflow.com/questions/865668/parse-command-line-arguments
+ */
+
+
+char* getCmdOption(char ** begin, char ** end, const std::string & option)
+{
+    char ** itr = std::find(begin, end, option);
+    if (itr != end && ++itr != end)
+    {
+        return *itr;
+    }
+    return 0;
+}
+
+/*
+ * Used for command line argument parsing; see previous function.
+ */
+
+bool cmdOptionExists(char** begin, char** end, const std::string& option)
+{
+    return std::find(begin, end, option) != end;
+}
+
+
 void replaceToken(char** token_list,
                   const char* token,
                   char* value) {
@@ -78,11 +103,33 @@ void replaceToken(char** token_list,
 }
 
 
-void displayCommandLine() {
+void replaceToken(std::vector<std::string> & cmd_line,
+                  const std::string & token,
+                  const std::string & value) {
+    std::replace(cmd_line.begin(),
+                 cmd_line.end(),
+                 token,
+                 value);
+}
+
+
+void displayCommandLine(char const* const* cmd_vec) {
     for (char const* const* cursor = cmd_vec; NULL != *cursor; ++cursor) {
         if (cursor != cmd_vec) printf("    ");
         printf("%s\n", *cursor);
     }
+}
+
+void displayCommandLine(std::vector<std::string> cmd_line) {
+    for (auto i = cmd_line.begin();
+         i != cmd_line.end();
+         ++i) {
+        if (i != cmd_line.begin()) {
+            std::cout << " ";
+        }
+        std::cout << *i;
+    }
+    std::cout << std::endl;
 }
 
 
@@ -91,6 +138,37 @@ void printBuffer(void* buffer, int buffer_len, int skip = 0) {
     for (int i = skip; i < buffer_len; ++i) {
         printf("%d: %hhu %c\n", i, (unsigned char) b[i], b[i]);
     }
+}
+
+
+int my_execv(std::string exec_path, std::vector<std::string> cmd_vec) {
+    char** cmd_ary = new char*[cmd_vec.size()];
+    for (int i = 0; i < cmd_vec.size(); ++i) {
+        cmd_ary[i] = new char[1 + cmd_vec[i].length()];
+        strcpy(cmd_ary[i], cmd_vec[i].c_str());
+    }
+
+    displayCommandLine(cmd_ary);
+
+    int rv = execvp(exec_path.c_str(), cmd_ary);
+
+    // If call succeeds, we won't end up here, and memory will be
+    // freed due to ending of this program. If we get here, though,
+    // the call failed and we should clean up.
+    
+    perror("execvp returned when it should not have");
+    if (errno == EFAULT) {
+        std::cerr << "Error is EFAULT" << std::endl;
+    } else {
+        std::cerr << "Error is *NOT* EFAULT" << std::endl;
+    }
+
+    for (int i = 0; i < cmd_vec.size(); ++i) {
+        delete[] cmd_ary[i];
+    }
+    delete[] cmd_ary;
+    
+    return rv;
 }
 
 
@@ -322,7 +400,9 @@ int createMessagesThread(const int socket_fd, pthread_t& thread_id) {
 
 
 // ++++++
-int forkWithBoundSocket(pthread_t& thread_id, pid_t& child_pid) {
+int forkWithBoundSocket(std::vector<std::string> cmd_line,
+                        pthread_t& thread_id,
+                        pid_t& child_pid) {
     int rv;
     int bound_pair[2];
 
@@ -343,12 +423,11 @@ int forkWithBoundSocket(pthread_t& thread_id, pid_t& child_pid) {
         assert(snprintf(socket_addr_str, 128, "%d", IMC_HANDLE) > 0);
 
         // child code
-        replaceToken(cmd_vec, IMC_FD_TOKEN, imc_fd_str);
-        replaceToken(cmd_vec, BOOTSTRAP_SOCKET_ADDR_TOKEN, socket_addr_str);
-        displayCommandLine();
-        int rv = execvp(cmd_vec[0], cmd_vec);
-        perror("execvp returned when it should not have");
-        return -1; // never executed
+        replaceToken(cmd_line, IMC_FD_TOKEN, imc_fd_str);
+        replaceToken(cmd_line, BOOTSTRAP_SOCKET_ADDR_TOKEN, socket_addr_str);
+        displayCommandLine(cmd_line);
+        int rv = my_execv(cmd_line[0], cmd_line);
+        return -1; // only executed if error
     }
 
     // server code
@@ -358,28 +437,63 @@ int forkWithBoundSocket(pthread_t& thread_id, pid_t& child_pid) {
 }
 
 
+void usage(const char* command) {
+    std::cerr << "Usage: " << command <<
+        " [-d] -s sel_ldr-path -i irt-path -n nexe-path" << std::endl;
+    std::cerr << "    -d = turn on debugging GDB hooks" << std::endl;
+}
+
+
 int main(int argc, char* argv[]) {
-    if (4 != argc) {
-        std::cerr << "Usage: " << argv[0] <<
-            " sel_ldr-path irt-path nexe-path" << std::endl;
+    int rv;
+
+    const bool debug = cmdOptionExists(argv, argv + argc, "-d");
+    const char* sel_ldr_path = getCmdOption(argv, argv + argc, "-s");
+    const char* irt_path = getCmdOption(argv, argv + argc, "-i");
+    const char* nexe_path = getCmdOption(argv, argv + argc, "-n");
+    // char* nexe_path = "imc_test_client_x86_64.nexe";
+
+    if (!sel_ldr_path || !irt_path || !nexe_path) {
+        usage(argv[0]);
         exit(1);
     }
 
-    int rv;
+    std::vector<std::string> cmd_line;
 
-    char* sel_ldr_path = argv[1];
-    char* irt_path = argv[2];
-    // const char const * nexe_path = argv[3];
-    char* nexe_path = "imc_test_client_x86_64.nexe";
+    cmd_line.push_back(sel_ldr_path);
 
-    replaceToken(cmd_vec, SEL_LDR_PATH_TOKEN, sel_ldr_path);
-    replaceToken(cmd_vec, IRT_PATH_TOKEN, irt_path);
-    replaceToken(cmd_vec, NEXE_PATH_TOKEN, nexe_path);
+    // allow file access plus some other syscalls
+    cmd_line.push_back("-a");
+
+    if (debug) {
+        cmd_line.push_back("-c");  // debug_mode_ignore_validator
+        // cmd_line.push_back("-c");  // repeating skips entirely
+        cmd_line.push_back("-d");  // debug_mode_startup_signal
+        cmd_line.push_back("-g");  // enable_debug_stub
+    }
+
+    // cmd_line.push_back("-Q");  // skip_qualification
+
+    // IMC handle
+    cmd_line.push_back("-i");
+    cmd_line.push_back(IMC_FD_TOKEN);  // to be replaced
+
+    // cmd_line.push_back("-v");  // verbosity
+
+    // add additional ELF file
+    cmd_line.push_back("-B");
+    cmd_line.push_back(irt_path);
+    
+    // cmd_line.push_back("-Ecity=ann_arbor");  // example env var
+
+    cmd_line.push_back("--");
+    cmd_line.push_back(nexe_path);
+    cmd_line.push_back(BOOTSTRAP_SOCKET_ADDR_TOKEN); // to be replaced
 
     pthread_t thread_id;
     pid_t child_pid;
 
-    rv = forkWithBoundSocket(thread_id, child_pid);
+    rv = forkWithBoundSocket(cmd_line, thread_id, child_pid);
     assert(0 == rv);
 
     std::cout << "server is waiting for thread to join..." << std::endl;
