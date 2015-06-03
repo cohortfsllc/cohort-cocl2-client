@@ -38,29 +38,7 @@ char* NEXE_PATH_TOKEN = "NEXE_PATH_TOKEN";
 char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
 char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
 
-
-char* cmd_vec2[] = {
-    SEL_LDR_PATH_TOKEN,
-    "-a", // allow file access plus some other syscalls
-#if GDB
-    "-c", // debug_mode_ignore_validator
-    // "-c", // repeating skips entirely
-    "-d", // debug_mode_startup_signal
-    "-g", // enable_debug_stub
-#endif
-    // "-Q", // skip_qualification
-    "-i",
-    IMC_FD_TOKEN, // IMC handle : socket_addr
-    // "-v", // verbosity
-    "-B",
-    IRT_PATH_TOKEN,
-    "-Ecity=ann_arbor", // example of setting environment variable
-    "--",
-    NEXE_PATH_TOKEN,
-    BOOTSTRAP_SOCKET_ADDR_TOKEN,
-    NULL,
-};
-
+bool debug_trusted = false;
 
 
 /*
@@ -257,6 +235,10 @@ void* testConnection(void* args) {
     char message_buff[1024];
 
     for (int i = 0; i < 4; ++i) {
+        std::cout << "Waiting 10 seconds to send test message to socket " <<
+            socket_fd << std::endl;
+        sleep(10);
+
         snprintf(message_buff, 1024, "Hello Planet %d %d %d!", i, i, i);
         int message_len = 1 + strlen(message_buff);
 
@@ -360,29 +342,11 @@ void* handleConnection(void* arg) {
 
             if (control_len > 0) {
                 printBuffer(control, control_len);
-                // createTesterThread(control[0]);
             }
         }
     }
 
     return NULL; // thread exits
-}
-
-
-
-
-int acceptConnectionsNotUsed(const int socket_fd, pthread_t& thread_id) {
-    int fd = accept(socket_fd, NULL, NULL);
-    assert(fd >= 0);
-
-    struct RegistrationArgs* conn_args =
-        (struct RegistrationArgs *) malloc(sizeof(struct RegistrationArgs));
-    conn_args->socket_fd = fd;
-
-    int rv = pthread_create(&thread_id, NULL, handleConnection, conn_args);
-    assert(0 == rv);
-
-    return 0;
 }
 
 
@@ -400,7 +364,6 @@ int createMessagesThread(const int socket_fd, pthread_t& thread_id) {
 }
 
 
-// ++++++
 int forkWithBoundSocket(std::vector<std::string> cmd_line,
                         pthread_t& thread_id,
                         pid_t& child_pid) {
@@ -426,9 +389,15 @@ int forkWithBoundSocket(std::vector<std::string> cmd_line,
         // child code
         replaceToken(cmd_line, IMC_FD_TOKEN, imc_fd_str);
         replaceToken(cmd_line, BOOTSTRAP_SOCKET_ADDR_TOKEN, socket_addr_str);
-        displayCommandLine(cmd_line);
+        // displayCommandLine(cmd_line);
+
         int rv = my_execv(cmd_line[0], cmd_line);
         return -1; // only executed if error
+    }
+
+    if (debug_trusted) {
+        std::cout << "sudo gdb " << cmd_line[0] << " " <<
+            child_pid << std::endl;
     }
 
     // server code
@@ -448,11 +417,13 @@ void usage(const char* command) {
 int main(int argc, char* argv[]) {
     int rv;
 
-    const bool debug = cmdOptionExists(argv, argv + argc, "-d");
+    const bool debug_untrusted = cmdOptionExists(argv, argv + argc, "-d");
+    debug_trusted = cmdOptionExists(argv, argv + argc, "-D");
     const char* sel_ldr_path = getCmdOption(argv, argv + argc, "-s");
     const char* irt_path = getCmdOption(argv, argv + argc, "-i");
     const char* nexe_path = getCmdOption(argv, argv + argc, "-n");
-    // char* nexe_path = "imc_test_client_x86_64.nexe";
+    const char* log_path = getCmdOption(argv, argv + argc, "-l");
+    
 
     if (!sel_ldr_path || !irt_path || !nexe_path) {
         usage(argv[0]);
@@ -463,15 +434,25 @@ int main(int argc, char* argv[]) {
 
     cmd_line.push_back(sel_ldr_path);
 
-    // allow file access plus some other syscalls
-    cmd_line.push_back("-a");
+    if (debug_trusted) {
+        // allows debugging of sel_ldr
+        cmd_line.push_back("--r_debug=0xXXXXXXXXXXXXXXXX");
+    }
 
-    if (debug) {
+    if (debug_untrusted) {
         cmd_line.push_back("-c");  // debug_mode_ignore_validator
         // cmd_line.push_back("-c");  // repeating skips entirely
         cmd_line.push_back("-d");  // debug_mode_startup_signal
         cmd_line.push_back("-g");  // enable_debug_stub
     }
+
+    if (log_path) {
+        cmd_line.push_back("-l");
+        cmd_line.push_back(log_path);
+    }
+
+    // allow file access plus some other syscalls
+    cmd_line.push_back("-a");
 
     // cmd_line.push_back("-Q");  // skip_qualification
 
