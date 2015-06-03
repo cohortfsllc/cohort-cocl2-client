@@ -1,6 +1,7 @@
 *~
 *.pexe
 *.nexe
+*.log
 runner
 cscope.*
 key-files
