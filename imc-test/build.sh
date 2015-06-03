@@ -3,11 +3,8 @@
 sdk="${HOME}/CoCl2/nacl_sdk/pepper_current"
 export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 
-# comment out to remove runtime gdb hooks
-GDB=-DGDB=1
-
 echo compiling runner
-g++ -g $GDB -o runner -pthread -std=c++11 -Wno-write-strings runner.cc
+g++ -g -o runner -pthread -std=c++11 -Wno-write-strings runner.cc
 
 exit_on_error() {
     if [ $? -ne 0 ] ;then
