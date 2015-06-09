@@ -368,8 +368,8 @@ int createTesterThread(int placement_fd) {
 
 void handleMessage(char buffer[], int buffer_len,
                    int control[], int control_len) {
-    if (!strncmp("REGISTER", buffer, 8)) {
-        char* name = buffer + 8 + 1;
+    if (OPS_EQUAL(OP_REGISTER, buffer)) {
+        char* name = buffer + OP_SIZE + 1;
         std::cout << "Found placement algorithm with name " <<
             name << std::endl;
         std::cout << "File descriptor number " << control[4] <<
