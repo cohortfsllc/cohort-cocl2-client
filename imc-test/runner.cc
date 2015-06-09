@@ -26,7 +26,7 @@ struct TesterArgs {
 
 
 const int IMC_HANDLE = 12;
-#define CONN_BUFF_LEN 64
+#define CONN_BUFF_LEN 1024
 #define RETURN_BUFF_LEN 2048
 #define CONTROL_LEN 32
 
@@ -114,7 +114,7 @@ void displayCommandLine(std::vector<std::string> cmd_line) {
 void printBuffer(void* buffer, int buffer_len, int skip = 0) {
     char* b = (char*) buffer;
     for (int i = skip; i < buffer_len; ++i) {
-        printf("%d: %hhu %c\n", i, (unsigned char) b[i], b[i]);
+        printf("%d: %3hhu %2hhx %c\n", i, (unsigned char) b[i], b[i], b[i]);
     }
 }
 
@@ -152,7 +152,7 @@ int my_execv(std::string exec_path, std::vector<std::string> cmd_vec) {
 
 
 int receiveMessage(const int fd,
-                   void* buff, int& buff_len,
+                   void* buff, int buff_len,
                    void* control, int& control_len) {
     struct msghdr header;
 
@@ -170,18 +170,76 @@ int receiveMessage(const int fd,
 
     int len_in = recvmsg(fd, &header, 0);
     if (len_in < 0) {
-        perror("server recvmsg error");
         return len_in;
     }
 
-    buff_len = message[0].iov_len;
     control_len = header.msg_controllen;
 
-    std::cout << "server received message of length " << len_in <<
-        ", first buffer has length of " << buff_len << 
-        ", control has length of " << control_len << std::endl;
-
     return len_in;
+}
+
+
+int receiveNaClMessage(const int fd,
+                       void* buff, int buff_len,
+                       void* control, int& control_len,
+                       int& bytes_to_skip) {
+    int length = receiveMessage(fd,
+                                buff, buff_len,
+                                control, control_len);
+
+    std::cout << "receiveMessage returned length of " << length <<
+        std::endl;
+
+    // propogate error
+    if (length < 0) {
+        return length;
+    }
+
+    NaClInternalHeaderCoCl2 * header =
+        (NaClInternalHeaderCoCl2 *) buff;
+    if (NACL_HANDLE_TRANSFER_PROTOCOL_COCL2
+        != header->h.xfer_protocol_version) {
+        std::cerr << "BAD NACL MESSAGE" << std::endl;
+        errno = EPROTONOSUPPORT;
+        return -errno;
+    }
+
+    bytes_to_skip = sizeof(NaClInternalHeaderCoCl2) +
+        header->h.descriptor_data_bytes;
+
+    return length - bytes_to_skip;
+}
+
+
+int receiveCoCl2Message(const int fd,
+                        void* buff, int buff_len,
+                        void* control, int& control_len,
+                        int& bytes_to_skip) {
+    int length = receiveNaClMessage(fd,
+                                    buff, buff_len,
+                                    control, control_len,
+                                    bytes_to_skip);
+    std::cout << "receiveNaClMessage returned length of " << length <<
+        std::endl;
+
+    // propogate error
+    if (length < 0) {
+        return length;
+    }
+
+    char* buffer = ((char*) buff) + bytes_to_skip;
+
+    CoCl2Header * header = (CoCl2Header *) buffer;
+    if (COCL2_PROTOCOL
+        != header->h.xfer_protocol_version) {
+        std::cerr << "BAD COCL2 MESSAGE" << std::endl;
+        errno = EPROTONOSUPPORT;
+        return -errno;
+    }
+
+    bytes_to_skip += sizeof(CoCl2Header);
+
+    return length - sizeof(CoCl2Header);
 }
 
 
@@ -235,12 +293,14 @@ void* testConnection(void* args) {
     char message_buff[1024];
 
     for (int i = 0; i < 4; ++i) {
-        std::cout << "Waiting 10 seconds to send test message to socket " <<
-            socket_fd << std::endl;
-        sleep(10);
-
         snprintf(message_buff, 1024, "Hello Planet %d %d %d!", i, i, i);
         int message_len = 1 + strlen(message_buff);
+
+        // DELAY
+        std::cout << "Waiting 10 seconds to send test message to socket " <<
+            socket_fd << std::endl;
+        sleep(30);
+        std::cout << "About to send message." << std::endl;
 
         int sent_len = sendMessage(socket_fd,
                                    message_buff, message_len,
@@ -255,12 +315,19 @@ void* testConnection(void* args) {
         int buff_len = RETURN_BUFF_LEN;
         int control_len = CONTROL_LEN * sizeof(int);
 
-        int recv_len =
-            receiveMessage(socket_fd, buff, buff_len, control, control_len);
-        std::cout << "receiveMessage sent message of length " << recv_len <<
+        int bytes_to_skip = 0;
+        int recv_len = receiveCoCl2Message(socket_fd,
+                                           buff, buff_len,
+                                           control, control_len,
+                                           bytes_to_skip);
+
+        char* buff_in = buff + bytes_to_skip;
+            
+        std::cout << "receiveCoCl2Message sent message of length " <<
+            recv_len <<
             " with control length of " << control_len << std::endl;
 
-        printBuffer(buff, recv_len);
+        printBuffer(buff_in, recv_len);
     } // for loop X 4
 
     return NULL;
@@ -312,38 +379,28 @@ void* handleConnection(void* arg) {
     int buffer_len = CONN_BUFF_LEN;
     int control_len = CONTROL_LEN * sizeof(int);
 
-    while(1) {
-        int length = receiveMessage(socket_fd,
-                                    buffer, buffer_len,
-                                    control, control_len);
-        std::cout << "handleConnection received message of length " <<
-            length << std::endl;
+    while (1) {
+        int bytes_to_skip = 0;
+        int bytes_received = receiveCoCl2Message(socket_fd,
+                                                 buffer, buffer_len,
+                                                 control, control_len,
+                                                 bytes_to_skip);
+        std::cout << "receiveCoCl2Message retunred length of " << bytes_received << std::endl;
 
-        int offset = -1;
-        for (int i ; i < length + COCL2_BANNER_LEN; i += 16) {
-            if (!memcmp(COCL2_BANNER, &buffer[i], COCL2_BANNER_LEN)) {
-                offset = i;
-                break;
-            }
+        if (bytes_received < 0) {
+            perror("Illegal connection message received");
+            continue;
         }
 
-        if (offset >= 0) {
-            handleMessage(buffer + offset + COCL2_BANNER_LEN,
-                          length - offset - COCL2_BANNER_LEN,
-                          control,
-                          control_len);
-        } else {
-            std::cerr << "No embedded message found." << std::endl;
-
-            printBuffer(buffer, length);
-
-            std::cerr << "handleConnection received " << control_len <<
-                " fds" << std::endl;
-
-            if (control_len > 0) {
-                printBuffer(control, control_len);
-            }
+        char* data = buffer + bytes_to_skip;
+        if ((data + bytes_received) > (buffer + buffer_len)) {
+            std::cerr << "WARNING: data bytes more than buffer bytes" <<
+                std::endl;
+            continue;
         }
+
+        handleMessage(data, bytes_received,
+                      control, control_len);
     }
 
     return NULL; // thread exits
@@ -423,7 +480,7 @@ int main(int argc, char* argv[]) {
     const char* irt_path = getCmdOption(argv, argv + argc, "-i");
     const char* nexe_path = getCmdOption(argv, argv + argc, "-n");
     const char* log_path = getCmdOption(argv, argv + argc, "-l");
-    
+    const char* verbosity_level = getCmdOption(argv, argv + argc, "-v");
 
     if (!sel_ldr_path || !irt_path || !nexe_path) {
         usage(argv[0]);
@@ -449,6 +506,13 @@ int main(int argc, char* argv[]) {
     if (log_path) {
         cmd_line.push_back("-l");
         cmd_line.push_back(log_path);
+    }
+
+    if (verbosity_level) {
+        int level = atoi(verbosity_level);
+        for (int i = 0; i < level; ++i) {
+            cmd_line.push_back("-v");
+        }
     }
 
     // allow file access plus some other syscalls
