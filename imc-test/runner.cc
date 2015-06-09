@@ -245,17 +245,29 @@ int receiveCoCl2Message(const int fd,
 
 int sendMessage(const int fd,
                 void* buff, int buff_len,
-                void* control, int control_len) {
+                void* control, int control_len,
+                bool is_cocl2_message = false) {
     struct msghdr header;
 
-    struct iovec message[1];
-    message[0].iov_base = buff;
-    message[0].iov_len = buff_len;
+    struct iovec message[3];
+
+    header.msg_iov = message;
+    if (!is_cocl2_message) {
+        message[0].iov_base = buff;
+        message[0].iov_len = buff_len;
+        header.msg_iovlen = 1;
+    } else {
+        message[0].iov_base = getNaClHeader();
+        message[0].iov_len = sizeof(NaClInternalHeaderCoCl2);
+        message[1].iov_base = getCoCl2Header();
+        message[1].iov_len = sizeof(CoCl2Header);
+        message[2].iov_base = buff;
+        message[2].iov_len = buff_len;
+        header.msg_iovlen = 3;
+    }
     
     header.msg_name = NULL;
     header.msg_namelen = 0;
-    header.msg_iov = message;
-    header.msg_iovlen = 1;
     header.msg_control = control;
     header.msg_controllen = control_len;
     header.msg_flags = 0;
@@ -268,6 +280,13 @@ int sendMessage(const int fd,
     return len_out;
 }
 
+
+int sendCoCl2Message(const int fd,
+                     void* buff, int buff_len,
+                     void* control, int control_len) {
+    int rv = sendMessage(fd, buff, buff_len, control, control_len, true);
+    return rv - sizeof(CoCl2Header) - sizeof(NaClInternalHeaderCoCl2);
+}
 
 void serverReadAllChars() {
     int count = 0;
@@ -296,16 +315,13 @@ void* testConnection(void* args) {
         snprintf(message_buff, 1024, "Hello Planet %d %d %d!", i, i, i);
         int message_len = 1 + strlen(message_buff);
 
-        // DELAY
-        std::cout << "Waiting 10 seconds to send test message to socket " <<
-            socket_fd << std::endl;
-        sleep(30);
+        sleep(5); // REMOVE ME
         std::cout << "About to send message." << std::endl;
 
-        int sent_len = sendMessage(socket_fd,
-                                   message_buff, message_len,
-                                   NULL, 0);
-        std::cout << "sendMessage sent message of length " << sent_len <<
+        int sent_len = sendCoCl2Message(socket_fd,
+                                        message_buff, message_len,
+                                        NULL, 0);
+        std::cout << "sendCoCl2Message sent message of length " << sent_len <<
             " expecting a value of " << message_len << std::endl;
 
 
@@ -385,8 +401,6 @@ void* handleConnection(void* arg) {
                                                  buffer, buffer_len,
                                                  control, control_len,
                                                  bytes_to_skip);
-        std::cout << "receiveCoCl2Message retunred length of " << bytes_received << std::endl;
-
         if (bytes_received < 0) {
             perror("Illegal connection message received");
             continue;
