@@ -17,4 +17,8 @@ extern bool debug_flag;
 #define INFO(format, ...) DEBUG("INFO: " format "\n", ##__VA_ARGS__ )
 #define ERROR(format, ...) DEBUG("ERROR: " format "\n", ##__VA_ARGS__ )
 
+
+extern void printBuffer(void* buffer, int buffer_len, int skip = 0);
+
+
 #endif // DEBUG_H

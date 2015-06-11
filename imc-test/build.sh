@@ -5,7 +5,7 @@ export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 
 echo compiling runner
 g++ -g -o runner -pthread -std=c++11 -Wno-write-strings \
-    runner.cc debug.c epoch_gen.cc
+    runner.cc debug.c messaging.cc epoch_gen.cc testing.cc -luuid
 
 exit_on_error() {
     if [ $? -ne 0 ] ;then
