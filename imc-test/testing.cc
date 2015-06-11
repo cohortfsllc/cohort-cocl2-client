@@ -36,8 +36,17 @@ void* testCallingThread(void* args_temp) {
     TestCallingArgs* args = (TestCallingArgs*) args_temp;
 
     struct random_data rdata;
-    rv = srandom_r(args-> randomSeed, &rdata);
+    char random_buff[64];
+    rv = initstate_r(args->randomSeed,
+                     random_buff, sizeof(random_buff),
+                     &rdata);
     assert(0 == rv);
+#if 0
+    if (rv) {
+        perror("srandom_r in testCallingThread failed");
+        exit(1);
+    }
+#endif
 
     uuid_t uuid;
     uuid_generate_random(uuid);
@@ -95,7 +104,7 @@ int createTestCallingThreads(const std::string& algorithmName,
         int rv = pthread_create(&threads[i],
                                 NULL,
                                 testCallingThread,
-                                &args);
+                                args);
         assert(0 == rv);
     }
 
