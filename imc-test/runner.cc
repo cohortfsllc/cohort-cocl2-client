@@ -40,14 +40,19 @@ bool debug_trusted = false;
 static EpochGenerator epochGenerator;
 
 
-struct RegistrationArgs {
+typedef struct {
     int socket_fd;
-};
+} RegistrationArgs;
 
 
-struct TesterArgs {
+typedef struct {
     int placer_fd;
-};
+} TesterArgs;
+
+
+typedef struct {
+    int socket_fd;
+} GetReturnsArgs;
 
 
 struct AlgorithmInfo {
@@ -387,10 +392,71 @@ int calculateOsds(const std::string& algorithm_name,
 }
 
 
+void* getReturnsThread(void* args_temp) {
+    GetReturnsArgs* args = (GetReturnsArgs*) args_temp;
+
+    char buff[RETURN_BUFF_LEN];
+    int control[CONTROL_LEN];
+
+    int buff_len = RETURN_BUFF_LEN;
+    int control_len = CONTROL_LEN * sizeof(int);
+
+    int bytes_to_skip;
+
+    while (1) {
+        bytes_to_skip = 0;
+        int recv_len = receiveCoCl2Message(args->socket_fd,
+                                           buff, buff_len,
+                                           control, control_len,
+                                           bytes_to_skip);
+
+        char* buff_in = buff + bytes_to_skip;
+
+        if (OPS_EQUAL(buff_in, OP_RETURN)) {
+            char* buff2 = buff + OP_SIZE;
+            OpReturnParams* return_params = (OpReturnParams*) buff2;
+            std::cout << "Got return for epoch " << return_params->epoch <<
+                std::endl;
+        } else if (OPS_EQUAL(buff_in, OP_ERROR)) {
+            char* buff2 = buff + OP_SIZE;
+            OpErrorParams* error_params = (OpErrorParams*) buff2;
+            char* error_message = buff2 + sizeof(OpErrorParams);
+            std::cout << "Got error for epoch " <<
+                error_params->ret_params.epoch <<
+                " error code " << error_params->error_code <<
+                " error message \"" << error_message <<
+                std::endl;
+        } else {
+            std::cerr << "return thread got unknown message" << std::endl;
+            printBuffer(buff_in, recv_len);
+        }
+    } // while (1)
+
+    free(args_temp);
+    return NULL;
+}
+
+
+int createGetReturnsThread(int placement_fd) {
+   GetReturnsArgs* args =
+        (GetReturnsArgs *) calloc(sizeof(GetReturnsArgs), 1);
+    args->socket_fd = placement_fd;
+
+    pthread_t thread_id;
+
+    int rv = pthread_create(&thread_id, NULL, getReturnsThread, args);
+    assert(0 == rv);
+
+    std::cout << "Thread created to gather returns." << std::endl;
+
+    return 0;
+}
+
+
 // runs in its own thread
 void* testConnection(void* args) {
     int rv;
-    int socket_fd = ((struct TesterArgs*) args)->placer_fd;
+    int socket_fd = ((TesterArgs*) args)->placer_fd;
     free(args);
 
     char message_buff[1024];
@@ -437,8 +503,8 @@ void* testConnection(void* args) {
 
 
 int createTesterThread(int placement_fd) {
-    struct TesterArgs* tester_args =
-        (struct TesterArgs *) calloc(sizeof(struct TesterArgs), 1);
+    TesterArgs* tester_args =
+        (TesterArgs *) calloc(sizeof(TesterArgs), 1);
     tester_args->placer_fd = placement_fd;
 
     pthread_t thread_id;
@@ -460,6 +526,9 @@ void handleMessage(char buffer[], int buffer_len,
             name << std::endl;
         std::cout << "File descriptor number " << control[4] <<
             " found" << std::endl;
+
+        // TODO create result data handler here 
+
         int rv = createTesterThread(control[4]);
         assert(0 == rv);
     } else {
@@ -472,7 +541,7 @@ void handleMessage(char buffer[], int buffer_len,
 void* handleConnection(void* arg) {
     std::cout << "In thread to receive messages." << std::endl;
 
-    int socket_fd = ((struct RegistrationArgs*) arg)->socket_fd;
+    int socket_fd = ((RegistrationArgs*) arg)->socket_fd;
     free(arg);
 
     char buffer[CONN_BUFF_LEN];
@@ -508,8 +577,8 @@ void* handleConnection(void* arg) {
 
 
 int createMessagesThread(const int socket_fd, pthread_t& thread_id) {
-    struct RegistrationArgs* conn_args =
-        (struct RegistrationArgs *) malloc(sizeof(struct RegistrationArgs));
+    RegistrationArgs* conn_args =
+        (RegistrationArgs *) malloc(sizeof(RegistrationArgs));
     conn_args->socket_fd = socket_fd;
 
     int rv = pthread_create(&thread_id, NULL, handleConnection, conn_args);
