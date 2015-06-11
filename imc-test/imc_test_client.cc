@@ -2,6 +2,8 @@
 #include <unistd.h>
 #include <iostream>
 #include <sys/time.h>
+#include <uuid/uuid.h>
+
 #include <irt.h>
 #include <irt_dev.h>
 #include "irt_cocl2.h"
@@ -24,10 +26,22 @@ int free_shared_mem(int handle) {
     return 0;
 }
 
-int compute_osds(const uuid_opaque volume_uuid,
+int compute_osds(const uuid_opaque vol_uuid,
                  const char* obj_name,
-                 int* osd_list,
-                 int osd_count) {
+                 uint32_t* osd_list,
+                 const int osd_count) {
+    uuid_t* uuid = (uuid_t*) &vol_uuid;
+    char uuid_text[256];
+    uuid_unparse(*uuid, uuid_text);
+    
+    std::cout << "inner compute_osds got called with object named " <<
+        obj_name << ", volume uuid of " << uuid_text <<
+        " is asking for " << osd_count << " osds." <<
+        std::endl;
+    for (int i = 0; i < osd_count; ++i) {
+        osd_list[i] = -(osd_count - i);
+    }
+
     return 0;
 }
 

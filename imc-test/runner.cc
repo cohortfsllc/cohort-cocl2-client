@@ -1,18 +1,43 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
 #include <algorithm>
 
 #include <errno.h>
 #include <unistd.h>
-#include <sys/wait.h>
+#include <stdarg.h>
 #include <assert.h>
 #include <string.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
+#include <uuid/uuid.h>
 
+#include "debug.h"
+#include "epoch_gen.h"
+#include "irt_cocl2.h"
 #include "cocl2_bridge.h"
+
+
+#define CONN_BUFF_LEN   1024
+#define RETURN_BUFF_LEN 2048
+#define CONTROL_LEN       32
+
+#define MAX_SEND_IOVEC     8
+
+const int IMC_HANDLE = 12;
+
+const int TOKEN_MAX_LEN = 128;
+char* SEL_LDR_PATH_TOKEN = "SEL_LDR_PATH_TOKEN";
+char* IRT_PATH_TOKEN = "IRT_PATH_TOKEN";
+char* NEXE_PATH_TOKEN = "NEXE_PATH_TOKEN";
+char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
+char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
+
+bool debug_trusted = false;
+static EpochGenerator epochGenerator;
 
 
 struct RegistrationArgs {
@@ -25,20 +50,14 @@ struct TesterArgs {
 };
 
 
-const int IMC_HANDLE = 12;
-#define CONN_BUFF_LEN 1024
-#define RETURN_BUFF_LEN 2048
-#define CONTROL_LEN 32
+struct AlgorithmInfo {
+    std::string name;
+    int socket_fd;
+};
 
 
-const int TOKEN_MAX_LEN = 128;
-char* SEL_LDR_PATH_TOKEN = "SEL_LDR_PATH_TOKEN";
-char* IRT_PATH_TOKEN = "IRT_PATH_TOKEN";
-char* NEXE_PATH_TOKEN = "NEXE_PATH_TOKEN";
-char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
-char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
-
-bool debug_trusted = false;
+pthread_rwlock_t algMapLock = PTHREAD_RWLOCK_INITIALIZER;
+std::map<std::string, AlgorithmInfo> algMap;
 
 
 /*
@@ -244,28 +263,50 @@ int receiveCoCl2Message(const int fd,
 
 
 int sendMessage(const int fd,
-                void* buff, int buff_len,
+                bool include_cocl2_header,
                 void* control, int control_len,
-                bool is_cocl2_message = false) {
+                ...) {
+
     struct msghdr header;
-
-    struct iovec message[3];
-
+    // need 2 extra for NaCL header and potential CoCl2 header
+    struct iovec message[2 + MAX_SEND_IOVEC];
     header.msg_iov = message;
-    if (!is_cocl2_message) {
-        message[0].iov_base = buff;
-        message[0].iov_len = buff_len;
-        header.msg_iovlen = 1;
-    } else {
-        message[0].iov_base = getNaClHeader();
-        message[0].iov_len = sizeof(NaClInternalHeaderCoCl2);
-        message[1].iov_base = getCoCl2Header();
-        message[1].iov_len = sizeof(CoCl2Header);
-        message[2].iov_base = buff;
-        message[2].iov_len = buff_len;
-        header.msg_iovlen = 3;
+
+    int cursor = 0;
+
+    message[cursor].iov_base = getNaClHeader();
+    message[cursor].iov_len = sizeof(NaClInternalHeaderCoCl2);
+    ++cursor;
+
+    if (include_cocl2_header) {
+        message[cursor].iov_base = getCoCl2Header();
+        message[cursor].iov_len = sizeof(CoCl2Header);
+        ++cursor;
     }
-    
+
+    va_list access;
+    va_start(access, control_len);
+    for (int count = 0; ; ++count) {
+        char* buffer = va_arg(access, char*);
+        if (!buffer) {
+            break;
+        }
+
+        if (count >= MAX_SEND_IOVEC) {
+            std::cerr << "tried to send too many parts to an iovec" <<
+                std::endl;
+            break;
+        }
+
+        int buffer_len = va_arg(access, int);
+
+        message[cursor].iov_base = buffer;
+        message[cursor].iov_len = buffer_len;
+        ++cursor;
+    }
+    va_end(access);
+
+    header.msg_iovlen = cursor;
     header.msg_name = NULL;
     header.msg_namelen = 0;
     header.msg_control = control;
@@ -273,20 +314,19 @@ int sendMessage(const int fd,
     header.msg_flags = 0;
 
     int len_out = sendmsg(fd, &header, 0);
-    if (len_out < 0) {
-        perror("server sendmsg error");
-    }
-
     return len_out;
 }
 
 
+#if 0
 int sendCoCl2Message(const int fd,
                      void* buff, int buff_len,
                      void* control, int control_len) {
     int rv = sendMessage(fd, buff, buff_len, control, control_len, true);
     return rv - sizeof(CoCl2Header) - sizeof(NaClInternalHeaderCoCl2);
 }
+#endif
+
 
 void serverReadAllChars() {
     int count = 0;
@@ -300,6 +340,50 @@ void serverReadAllChars() {
         std::cout << count++ << " : " << (char) c << std::endl;
     }
     std::cout << "Done reading." << std::endl;
+}
+
+
+int calculateOsds(const std::string& algorithm_name,
+                  const uuid_t& uuid,
+                  const char* object_name,
+                  const uint32_t osds_requested,
+                  uint32_t osd_list[]) {
+    pthread_rwlock_rdlock(&algMapLock);
+    auto it = algMap.find(algorithm_name);
+    pthread_rwlock_unlock(&algMapLock);
+    if (it == algMap.end()) {
+        ERROR("unknown algorithm");
+        return -1;
+    }
+
+    int socket_fd = it->second.socket_fd;
+    OpPlacementCallParams params;
+    params.call_params.epoch = epochGenerator.nextEpoch();
+    params.call_params.part = -1;
+    params.call_params.func_id = FUNC_PLACEMENT;
+    params.osds_requested = osds_requested;
+    assert(sizeof(uuid_opaque) == sizeof(uuid_t));
+    bcopy(&uuid, &params.uuid, sizeof(uuid_opaque));
+
+    // TODO generate call return record
+
+    int rv = sendMessage(socket_fd,
+                         true,
+                         NULL, 0,
+                         OP_CALL, OP_SIZE,
+                         &params, sizeof(params),
+                         object_name, 1 + strlen(object_name),
+                         NULL);
+
+    if (rv < 0) {
+        return rv;
+    }
+
+    // TODO use condition variable to wait for response
+
+    // TODO put response in osd_list
+
+    return 0;
 }
 
 
@@ -318,9 +402,11 @@ void* testConnection(void* args) {
         sleep(5); // REMOVE ME
         std::cout << "About to send message." << std::endl;
 
-        int sent_len = sendCoCl2Message(socket_fd,
-                                        message_buff, message_len,
-                                        NULL, 0);
+        int sent_len = sendMessage(socket_fd,
+                                   true,
+                                   NULL, 0,
+                                   message_buff, message_len,
+                                   NULL);
         std::cout << "sendCoCl2Message sent message of length " << sent_len <<
             " expecting a value of " << message_len << std::endl;
 
@@ -369,7 +455,7 @@ int createTesterThread(int placement_fd) {
 void handleMessage(char buffer[], int buffer_len,
                    int control[], int control_len) {
     if (OPS_EQUAL(OP_REGISTER, buffer)) {
-        char* name = buffer + OP_SIZE + 1;
+        char* name = buffer + OP_SIZE;
         std::cout << "Found placement algorithm with name " <<
             name << std::endl;
         std::cout << "File descriptor number " << control[4] <<
@@ -482,6 +568,10 @@ void usage(const char* command) {
     std::cerr << "Usage: " << command <<
         " [-d] -s sel_ldr-path -i irt-path -n nexe-path" << std::endl;
     std::cerr << "    -d = turn on debugging GDB hooks" << std::endl;
+}
+
+
+void initLocks() {
 }
 
 

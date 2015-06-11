@@ -4,7 +4,8 @@ sdk="${HOME}/CoCl2/nacl_sdk/pepper_current"
 export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 
 echo compiling runner
-g++ -g -o runner -pthread -std=c++11 -Wno-write-strings runner.cc
+g++ -g -o runner -pthread -std=c++11 -Wno-write-strings \
+    runner.cc debug.c epoch_gen.cc
 
 exit_on_error() {
     if [ $? -ne 0 ] ;then
@@ -15,7 +16,7 @@ exit_on_error() {
 
 compile() {
     echo compiling and linking ${2}
-    ${1} $TEST -o ${2}.pexe ${2}.cc
+    ${1} $TEST -o ${2}.pexe ${2}.cc -luuid
 
     exit_on_error
 
