@@ -16,8 +16,8 @@ extern int receiveCoCl2Message(const int fd,
                                int& bytes_to_skip);
 
 extern int sendMessage(const int fd,
-                       bool include_cocl2_header,
                        void* control, int control_len,
+                       bool include_cocl2_header,
                        ...);
 
 #endif // MESSAGING_H

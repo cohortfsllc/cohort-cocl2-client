@@ -100,9 +100,10 @@ int receiveCoCl2Message(const int fd,
 }
 
 
+// bool parameter is b/w control and data buffers to help clarity difference
 int sendMessage(const int fd,
-                bool include_cocl2_header,
                 void* control, int control_len,
+                bool include_cocl2_header,
                 ...) {
 
     struct msghdr header;
@@ -123,7 +124,7 @@ int sendMessage(const int fd,
     }
 
     va_list access;
-    va_start(access, control_len);
+    va_start(access, include_cocl2_header);
     for (int count = 0; ; ++count) {
         char* buffer = va_arg(access, char*);
         if (!buffer) {
@@ -151,6 +152,7 @@ int sendMessage(const int fd,
     header.msg_flags = 0;
 
     int len_out = sendmsg(fd, &header, 0);
+
     return len_out;
 }
 

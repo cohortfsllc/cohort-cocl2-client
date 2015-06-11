@@ -41,12 +41,6 @@ void* testCallingThread(void* args_temp) {
                      random_buff, sizeof(random_buff),
                      &rdata);
     assert(0 == rv);
-#if 0
-    if (rv) {
-        perror("srandom_r in testCallingThread failed");
-        exit(1);
-    }
-#endif
 
     uuid_t uuid;
     uuid_generate_random(uuid);
@@ -111,12 +105,13 @@ int createTestCallingThreads(const std::string& algorithmName,
     for (int i = 0; i < threadCount; ++i) {
         int rv = pthread_join(threads[i], NULL);
         if (0 != rv) {
-            std::cerr << "Got error from pthread_join " << rv << std::endl;
+            ERROR("Got error from pthread_join: %d", rv);
         }
     }
 
     delete[] threads;
-    std::cout << "All calling testing threads complete." << std::endl;
+
+    INFO("All Calling testing threads complete.");
 }
 
 
@@ -135,17 +130,14 @@ void* testConnectionThread(void* args_temp) {
         snprintf(message_buff, 1024, "Hello Planet %d %d %d!", i, i, i);
         int message_len = 1 + strlen(message_buff);
 
-        sleep(5); // REMOVE ME
-        std::cout << "About to send message." << std::endl;
-
         int sent_len = sendMessage(socket_fd,
-                                   true,
                                    NULL, 0,
+                                   true,
                                    message_buff, message_len,
                                    NULL);
-        std::cout << "sendCoCl2Message sent message of length " << sent_len <<
-            " expecting a value of " << message_len << std::endl;
-
+        INFO("sendCoCl2Message sent message of length %d expecting a "
+             "value of %d",
+             sent_len, message_len);
 
         char buff[RETURN_BUFF_LEN];
         int control[CONTROL_LEN];
@@ -160,10 +152,10 @@ void* testConnectionThread(void* args_temp) {
                                            bytes_to_skip);
 
         char* buff_in = buff + bytes_to_skip;
-            
-        std::cout << "receiveCoCl2Message sent message of length " <<
-            recv_len <<
-            " with control length of " << control_len << std::endl;
+
+        INFO("receiveCoCl2Message sent message of length %d with "
+             "control length of %d",
+             recv_len, control_len);
 
         printBuffer(buff_in, recv_len);
     } // for loop X 4
@@ -184,7 +176,7 @@ int createTestConnectionThread(int placement_fd) {
                             tester_args);
     assert(0 == rv);
 
-    std::cout << "Thread created to test placer." << std::endl;
+    INFO("Thread created to test placer.");
 
     return 0;
 }

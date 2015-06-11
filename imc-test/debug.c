@@ -2,6 +2,7 @@
 
 
 bool debug_flag = true;
+char* debug_header = "O";
 
 
 void printBuffer(void* buffer, int buffer_len, int skip = 0) {

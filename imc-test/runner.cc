@@ -52,14 +52,58 @@ typedef struct {
 } HandleReturnsArgs;
 
 
-struct AlgorithmInfo {
+class AlgorithmInfo {
+private:
     std::string name;
     int socket_fd;
+
+    static pthread_rwlock_t algMapLock;
+    static std::map<std::string, AlgorithmInfo> algMap;
+
+public:
+    AlgorithmInfo(const std::string& alg_name, int socket_fd)
+        : name(alg_name), socket_fd(socket_fd) {
+        // empty
+    }
+
+    virtual ~AlgorithmInfo() {
+        // empty
+    }
+
+    AlgorithmInfo& operator=(const AlgorithmInfo& rhs) {
+        this->name = rhs.name;
+        this->socket_fd = rhs.socket_fd;
+        return *this;
+    }
+
+    int getSocket() const { return socket_fd; }
+    const std::string& getName() const { return name; }
+
+    static void addAlgorithm(const AlgorithmInfo& alg_info);
+    static const AlgorithmInfo* getAlgorithm(const std::string& alg_name);
 };
 
 
-pthread_rwlock_t algMapLock = PTHREAD_RWLOCK_INITIALIZER;
-std::map<std::string, AlgorithmInfo> algMap;
+pthread_rwlock_t AlgorithmInfo::algMapLock = PTHREAD_RWLOCK_INITIALIZER;
+
+
+void AlgorithmInfo::addAlgorithm(const AlgorithmInfo& alg_info) {
+    pthread_rwlock_wrlock(&AlgorithmInfo::algMapLock);
+    algMap[alg_info.name] = alg_info;
+    pthread_rwlock_unlock(&AlgorithmInfo::algMapLock);
+}
+
+const AlgorithmInfo* AlgorithmInfo::getAlgorithm(const std::string& alg_name) {
+    pthread_rwlock_rdlock(&AlgorithmInfo::algMapLock);
+    auto it = algMap.find(alg_name);
+    pthread_rwlock_unlock(&AlgorithmInfo::algMapLock);
+
+    if (it == algMap.end()) {
+        return NULL;
+    } else {
+        return &it->second;
+    }
+}
 
 
 /*
@@ -164,20 +208,17 @@ int my_execv(std::string exec_path, std::vector<std::string> cmd_vec) {
 }
 
 
-int calculateOsds(const std::string& algorithm_name,
+int calculateOsds(const std::string& alg_name,
                   const uuid_t& uuid,
                   const char* object_name,
                   const uint32_t osds_requested,
                   uint32_t osd_list[]) {
-    pthread_rwlock_rdlock(&algMapLock);
-    auto it = algMap.find(algorithm_name);
-    pthread_rwlock_unlock(&algMapLock);
-    if (it == algMap.end()) {
+    const AlgorithmInfo* alg = AlgorithmInfo::getAlgorithm(alg_name);
+    if (NULL == alg) {
         ERROR("unknown algorithm");
         return -1;
     }
 
-    int socket_fd = it->second.socket_fd;
     OpPlacementCallParams params;
     params.call_params.epoch = epochGenerator.nextEpoch();
     params.call_params.part = -1;
@@ -188,15 +229,16 @@ int calculateOsds(const std::string& algorithm_name,
 
     // TODO generate call return record
 
-    int rv = sendMessage(socket_fd,
-                         true,
+    int rv = sendMessage(alg->getSocket(),
                          NULL, 0,
+                         true,
                          OP_CALL, OP_SIZE,
                          &params, sizeof(params),
                          object_name, 1 + strlen(object_name),
                          NULL);
 
     if (rv < 0) {
+        perror("Error calling sendMessage");
         return rv;
     }
 
@@ -275,17 +317,16 @@ void handleMessage(char buffer[], int buffer_len,
         char* name = buffer + OP_SIZE;
         std::string algorithmName = name;
 
-        std::cout << "Found placement algorithm with name " <<
-            name << std::endl;
-        std::cout << "File descriptor number " << control[4] <<
-            " found" << std::endl;
+        INFO("Found placement algorithm with name %s (%s).",
+             name, algorithmName.c_str());
 
         int rv;
 
         rv = createHandleReturnsThread(control[4]);
         assert(0 == rv);
 
-        rv = createTestCallingThreads(algorithmName, 1, 5, 5, 2);
+        // rv = createTestCallingThreads(algorithmName, 1, 5, 5, 2);
+        rv = createTestCallingThreads(algorithmName, 1, 1, 5, 2);
         assert(0 == rv);
 
         // TODO create result data handler here 
