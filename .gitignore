@@ -2,7 +2,8 @@
 *.pexe
 *.nexe
 *.log
-runner
+*.cmds
 cscope.*
+runner
 key-files
-nacl-gdb.cmds
+core

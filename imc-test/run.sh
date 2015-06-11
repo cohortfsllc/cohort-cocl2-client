@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 sel_ldr="${HOME}/CoCl2/native_client/native_client/scons-out/dbg-linux-x86-64/staging/sel_ldr"
 irt="${HOME}/CoCl2/native_client/native_client/scons-out/nacl_irt-x86-64/staging/irt_core.nexe"
@@ -11,6 +11,13 @@ nacl-irt `readlink -f $irt`
 file `readlink -f $nexe`
 EOF
 
-set -x
-# ${sel_ldr} -B ${irt} -- ${nexe}
-./runner -s $sel_ldr -i $irt -n $nexe "$@"
+if [[ $0 == *"debug.sh"* ]] ;then
+    cat >runner-gdb.cmds <<EOF
+set args -s $sel_ldr -i $irt -n $nexe $@
+EOF
+    set -x
+    gdb runner -x runner-gdb.cmds
+else
+    set -x
+    ./runner -s $sel_ldr -i $irt -n $nexe "$@"
+fi
