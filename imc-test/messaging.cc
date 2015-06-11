@@ -7,6 +7,7 @@
 
 #include "irt_cocl2.h"
 #include "cocl2_bridge.h"
+#include "debug.h"
 
 #include "messaging.h"
 
@@ -49,10 +50,6 @@ int receiveNaClMessage(const int fd,
     int length = receiveMessage(fd,
                                 buff, buff_len,
                                 control, control_len);
-
-    std::cout << "receiveMessage returned length of " << length <<
-        std::endl;
-
     // propogate error
     if (length < 0) {
         return length;
@@ -62,7 +59,7 @@ int receiveNaClMessage(const int fd,
         (NaClInternalHeaderCoCl2 *) buff;
     if (NACL_HANDLE_TRANSFER_PROTOCOL_COCL2
         != header->h.xfer_protocol_version) {
-        std::cerr << "BAD NACL MESSAGE" << std::endl;
+        ERROR("BAD NACL MESSAGE 0x%04x", header->h.xfer_protocol_version);
         errno = EPROTONOSUPPORT;
         return -errno;
     }
@@ -82,9 +79,6 @@ int receiveCoCl2Message(const int fd,
                                     buff, buff_len,
                                     control, control_len,
                                     bytes_to_skip);
-    std::cout << "receiveNaClMessage returned length of " << length <<
-        std::endl;
-
     // propogate error
     if (length < 0) {
         return length;
@@ -95,7 +89,7 @@ int receiveCoCl2Message(const int fd,
     CoCl2Header * header = (CoCl2Header *) buffer;
     if (COCL2_PROTOCOL
         != header->h.xfer_protocol_version) {
-        std::cerr << "BAD COCL2 MESSAGE" << std::endl;
+        ERROR("Bad CoCl2 message 0x%04x", header->h.xfer_protocol_version);
         errno = EPROTONOSUPPORT;
         return -errno;
     }
@@ -137,8 +131,7 @@ int sendMessage(const int fd,
         }
 
         if (count >= MAX_SEND_IOVEC) {
-            std::cerr << "tried to send too many parts to an iovec" <<
-                std::endl;
+            ERROR("tried to send too many parts (%d) to an iovec", count);
             break;
         }
 
