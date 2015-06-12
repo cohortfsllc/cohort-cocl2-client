@@ -18,8 +18,9 @@
 #include "cocl2_bridge.h"
 
 #include "messaging.h"
-#include "debug.h"
 #include "epoch_gen.h"
+#include "alg_map.h"
+#include "debug.h"
 #include "testing.h"
 
 #include "runner.h"
@@ -50,60 +51,6 @@ typedef struct {
 typedef struct {
     int socket_fd;
 } HandleReturnsArgs;
-
-
-class AlgorithmInfo {
-private:
-    std::string name;
-    int socket_fd;
-
-    static pthread_rwlock_t algMapLock;
-    static std::map<std::string, AlgorithmInfo> algMap;
-
-public:
-    AlgorithmInfo(const std::string& alg_name, int socket_fd)
-        : name(alg_name), socket_fd(socket_fd) {
-        // empty
-    }
-
-    virtual ~AlgorithmInfo() {
-        // empty
-    }
-
-    AlgorithmInfo& operator=(const AlgorithmInfo& rhs) {
-        this->name = rhs.name;
-        this->socket_fd = rhs.socket_fd;
-        return *this;
-    }
-
-    int getSocket() const { return socket_fd; }
-    const std::string& getName() const { return name; }
-
-    static void addAlgorithm(const AlgorithmInfo& alg_info);
-    static const AlgorithmInfo* getAlgorithm(const std::string& alg_name);
-};
-
-
-pthread_rwlock_t AlgorithmInfo::algMapLock = PTHREAD_RWLOCK_INITIALIZER;
-
-
-void AlgorithmInfo::addAlgorithm(const AlgorithmInfo& alg_info) {
-    pthread_rwlock_wrlock(&AlgorithmInfo::algMapLock);
-    algMap[alg_info.name] = alg_info;
-    pthread_rwlock_unlock(&AlgorithmInfo::algMapLock);
-}
-
-const AlgorithmInfo* AlgorithmInfo::getAlgorithm(const std::string& alg_name) {
-    pthread_rwlock_rdlock(&AlgorithmInfo::algMapLock);
-    auto it = algMap.find(alg_name);
-    pthread_rwlock_unlock(&AlgorithmInfo::algMapLock);
-
-    if (it == algMap.end()) {
-        return NULL;
-    } else {
-        return &it->second;
-    }
-}
 
 
 /*
