@@ -40,6 +40,7 @@ public:
     const std::string& getName() const { return name; }
 
     static void addAlgorithm(const AlgorithmInfo& alg_info);
+    static void addAlgorithm(const std::string& name, const int socket_fd);
     static const AlgorithmInfo* getAlgorithm(const std::string& alg_name);
 };
 

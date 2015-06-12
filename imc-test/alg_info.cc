@@ -1,12 +1,16 @@
 #include <map>
 #include <pthread.h>
 
-#include "alg_map.h"
+#include "alg_info.h"
 
 
 pthread_rwlock_t AlgorithmInfo::algMapLock = PTHREAD_RWLOCK_INITIALIZER;
 std::map<std::string, AlgorithmInfo> AlgorithmInfo::algMap;
 
+
+void AlgorithmInfo::addAlgorithm(const std::string& name, const int socket_fd) {
+    addAlgorithm(AlgorithmInfo(name, socket_fd));
+}
 
 void AlgorithmInfo::addAlgorithm(const AlgorithmInfo& alg_info) {
     pthread_rwlock_wrlock(&AlgorithmInfo::algMapLock);

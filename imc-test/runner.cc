@@ -19,7 +19,7 @@
 
 #include "messaging.h"
 #include "epoch_gen.h"
-#include "alg_map.h"
+#include "alg_info.h"
 #include "debug.h"
 #include "testing.h"
 
@@ -162,7 +162,7 @@ int calculateOsds(const std::string& alg_name,
                   uint32_t osd_list[]) {
     const AlgorithmInfo* alg = AlgorithmInfo::getAlgorithm(alg_name);
     if (NULL == alg) {
-        ERROR("unknown algorithm");
+        ERROR("unknown algorithm %s", alg_name.c_str());
         return -1;
     }
 
@@ -266,6 +266,12 @@ void handleMessage(char buffer[], int buffer_len,
 
         INFO("Found placement algorithm with name %s (%s).",
              name, algorithmName.c_str());
+
+        INFO("control length is %d", control_len);
+        // TODO check on control_len
+        int socket_fd = control[4];
+
+        AlgorithmInfo::addAlgorithm(name, socket_fd);
 
         int rv;
 
