@@ -208,31 +208,36 @@ void* getReturnsThread(void* args_temp) {
 
     int bytes_to_skip;
 
+    INFO("Thread waiting for returns and errors.");
     while (1) {
         bytes_to_skip = 0;
         int recv_len = receiveCoCl2Message(args->socket_fd,
                                            buff, buff_len,
                                            control, control_len,
                                            bytes_to_skip);
+        if (recv_len < 0) {
+            ERROR("error receiving message from sandbox");
+            INFO("SLEEPING for 5");
+            sleep(5);
+            continue;
+        }
 
         char* buff_in = buff + bytes_to_skip;
 
         if (OPS_EQUAL(buff_in, OP_RETURN)) {
             char* buff2 = buff + OP_SIZE;
             OpReturnParams* return_params = (OpReturnParams*) buff2;
-            std::cout << "Got return for epoch " << return_params->epoch <<
-                std::endl;
+            INFO("Got return for epoch %d", return_params->epoch);
         } else if (OPS_EQUAL(buff_in, OP_ERROR)) {
             char* buff2 = buff + OP_SIZE;
             OpErrorParams* error_params = (OpErrorParams*) buff2;
             char* error_message = buff2 + sizeof(OpErrorParams);
-            std::cout << "Got error for epoch " <<
-                error_params->ret_params.epoch <<
-                " error code " << error_params->error_code <<
-                " error message \"" << error_message <<
-                std::endl;
+            ERROR("Got error for epoch %d, error code %d, error message: %s",
+                  error_params->ret_params.epoch,
+                  error_params->error_code,
+                  error_message);
         } else {
-            std::cerr << "return thread got unknown message" << std::endl;
+            ERROR("return thread got unknown message; here's the buffer");
             printBuffer(buff_in, recv_len);
         }
     } // while (1)
@@ -252,8 +257,6 @@ int createHandleReturnsThread(int placement_fd) {
     int rv = pthread_create(&thread_id, NULL, getReturnsThread, args);
     assert(0 == rv);
 
-    std::cout << "Thread created to gather returns." << std::endl;
-
     return 0;
 }
 
@@ -264,18 +267,18 @@ void handleMessage(char buffer[], int buffer_len,
         char* name = buffer + OP_SIZE;
         std::string algorithmName = name;
 
-        INFO("Found placement algorithm with name %s (%s).",
-             name, algorithmName.c_str());
+        INFO("Registered placement algorithm \"%s\".",
+             name);
 
-        INFO("control length is %d", control_len);
-        // TODO check on control_len
+        // socket_fd is in the fifth position
+        assert(control_len > 5 * sizeof(int));
         int socket_fd = control[4];
 
         AlgorithmInfo::addAlgorithm(name, socket_fd);
 
         int rv;
 
-        rv = createHandleReturnsThread(control[4]);
+        rv = createHandleReturnsThread(socket_fd);
         assert(0 == rv);
 
         // rv = createTestCallingThreads(algorithmName, 1, 5, 5, 2);
@@ -283,13 +286,8 @@ void handleMessage(char buffer[], int buffer_len,
         assert(0 == rv);
 
         // TODO create result data handler here 
-
-#if 0
-        int rv = createTesterThread(control[4]);
-        assert(0 == rv);
-#endif
     } else {
-        std::cerr << "No valid message found." << std::endl;
+        ERROR("Received invalid message.");
     }
 }
 
@@ -394,10 +392,6 @@ void usage(const char* command) {
     std::cerr << "Usage: " << command <<
         " [-d] -s sel_ldr-path -i irt-path -n nexe-path" << std::endl;
     std::cerr << "    -d = turn on debugging GDB hooks" << std::endl;
-}
-
-
-void initLocks() {
 }
 
 

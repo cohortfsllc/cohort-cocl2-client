@@ -44,6 +44,9 @@ void* testCallingThread(void* args_temp) {
 
     uuid_t uuid;
     uuid_generate_random(uuid);
+    char uuid_text[256];
+    uuid_unparse(uuid, uuid_text);
+    INFO("Generated UUID is %s", uuid_text);
 
     char* objectName = "Bob";
 
@@ -86,6 +89,7 @@ int createTestCallingThreads(const std::string& algorithmName,
                              int secsBetweenCalls,
                              int32_t secsVariance) {
     pthread_t* threads = new pthread_t[threadCount];
+    uint32_t randomSeedBase = time(NULL);
 
     for (int i = 0; i < threadCount; ++i) {
         auto args = new TestCallingArgs();
@@ -93,7 +97,7 @@ int createTestCallingThreads(const std::string& algorithmName,
         args->callCount = callsPerThread;
         args->secsBetweenCalls = secsBetweenCalls;
         args->secsVariance = secsVariance;
-        args->randomSeed = time(NULL) + i;
+        args->randomSeed = randomSeedBase + i;
 
         int rv = pthread_create(&threads[i],
                                 NULL,
@@ -112,6 +116,8 @@ int createTestCallingThreads(const std::string& algorithmName,
     delete[] threads;
 
     INFO("All Calling testing threads complete.");
+
+    return 0;
 }
 
 

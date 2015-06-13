@@ -16,7 +16,7 @@ exit_on_error() {
 
 compile() {
     echo compiling and linking ${2}
-    ${1} $TEST -o ${2}.pexe ${2}.cc -luuid
+    ${1} -g -o ${2}.pexe ${2}.cc -luuid
 
     exit_on_error
 
