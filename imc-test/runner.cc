@@ -231,7 +231,7 @@ void* getReturnsThread(void* args_temp) {
             char* buff3 = buff2 + sizeof(OpReturnParams);
             char* end = buff_in + recv_len;
             for (char* cursor = buff3; cursor < end; ++cursor) {
-                INFO("char at %d is %02x",
+                INFO("char at %3d is %02hhx",
                      (int) (cursor - buff3),
                      (int) (*cursor));
             }
@@ -289,7 +289,7 @@ void handleMessage(char buffer[], int buffer_len,
         assert(0 == rv);
 
         // rv = createTestCallingThreads(algorithmName, 1, 5, 5, 2);
-        rv = createTestCallingThreads(algorithmName, 1, 3, 3, 2);
+        rv = createTestCallingThreads(algorithmName, 2, 5, 1, 3);
         assert(0 == rv);
 
         // TODO create result data handler here 

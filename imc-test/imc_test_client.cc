@@ -30,7 +30,8 @@ int compute_osds(const uuid_opaque vol_uuid,
                  const char* obj_name,
                  uint32_t* osd_list,
                  const int osd_count) {
-#if 0
+#define COMPUTE_OUT 0
+#if COMPUTE_OUT
     {
         std::ios::fmtflags f( std::cout.flags() );
         std::cout << "vol_uuid " << (void*) vol_uuid << std::endl;
@@ -43,7 +44,7 @@ int compute_osds(const uuid_opaque vol_uuid,
 #endif
     uuid_t* uuid = (uuid_t*) &vol_uuid;
 
-#if 0
+#if COMPUTE_OUT
     char uuid_text[256];
     uuid_unparse(*uuid, uuid_text);
     
