@@ -44,6 +44,14 @@ void* testCallingThread(void* args_temp) {
 
     uuid_t uuid;
     uuid_generate_random(uuid);
+    {
+        std::ios::fmtflags f( std::cout.flags() );
+        std::cout << std::hex;
+        for (int i = 0; i < 16; ++i) { std::cout << (int) uuid[i] << " "; }
+        std::cout << std::endl;
+        std::cout.flags(f); 
+    }
+
     char uuid_text[256];
     uuid_unparse(uuid, uuid_text);
     INFO("Generated UUID is %s", uuid_text);

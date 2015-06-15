@@ -225,9 +225,16 @@ void* getReturnsThread(void* args_temp) {
         char* buff_in = buff + bytes_to_skip;
 
         if (OPS_EQUAL(buff_in, OP_RETURN)) {
-            char* buff2 = buff + OP_SIZE;
+            char* buff2 = buff_in + OP_SIZE;
             OpReturnParams* return_params = (OpReturnParams*) buff2;
             INFO("Got return for epoch %d", return_params->epoch);
+            char* buff3 = buff2 + sizeof(OpReturnParams);
+            char* end = buff_in + recv_len;
+            for (char* cursor = buff3; cursor < end; ++cursor) {
+                INFO("char at %d is %02x",
+                     (int) (cursor - buff3),
+                     (int) (*cursor));
+            }
         } else if (OPS_EQUAL(buff_in, OP_ERROR)) {
             char* buff2 = buff + OP_SIZE;
             OpErrorParams* error_params = (OpErrorParams*) buff2;
@@ -282,7 +289,7 @@ void handleMessage(char buffer[], int buffer_len,
         assert(0 == rv);
 
         // rv = createTestCallingThreads(algorithmName, 1, 5, 5, 2);
-        rv = createTestCallingThreads(algorithmName, 1, 1, 5, 2);
+        rv = createTestCallingThreads(algorithmName, 1, 3, 3, 2);
         assert(0 == rv);
 
         // TODO create result data handler here 

@@ -30,7 +30,20 @@ int compute_osds(const uuid_opaque vol_uuid,
                  const char* obj_name,
                  uint32_t* osd_list,
                  const int osd_count) {
+#if 0
+    {
+        std::ios::fmtflags f( std::cout.flags() );
+        std::cout << "vol_uuid " << (void*) vol_uuid << std::endl;
+        std::cout << "obj_name " << (void*) obj_name << std::endl;
+        std::cout << std::hex;
+        for (int i = 0; i < 16; ++i) { std::cout << (int) vol_uuid[i] << " "; }
+        std::cout << std::endl;
+        std::cout.flags(f); 
+    }
+#endif
     uuid_t* uuid = (uuid_t*) &vol_uuid;
+
+#if 0
     char uuid_text[256];
     uuid_unparse(*uuid, uuid_text);
     
@@ -38,6 +51,7 @@ int compute_osds(const uuid_opaque vol_uuid,
         obj_name << ", volume uuid of " << uuid_text <<
         " is asking for " << osd_count << " osds." <<
         std::endl;
+#endif
     for (int i = 0; i < osd_count; ++i) {
         osd_list[i] = -(osd_count - i);
     }
