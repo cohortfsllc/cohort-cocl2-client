@@ -25,6 +25,8 @@ private:
     // then the results were truncated.
     size_t          resultsBlockProvided;
 
+protected:
+
     CallReturnRec(int epoch, char* resultsBlock, size_t resultsBlockSize);
 
     friend CallReturnHandler;
@@ -41,10 +43,13 @@ public:
 
 class CallReturnHandler {
 private:
-    std::list<CallReturnRec> queue;
+    std::list<CallReturnRec*> queue;
     int currentEpoch;
 
     pthread_mutex_t mutex;
+
+    // must hold mutex before calling
+    std::list<CallReturnRec*>::iterator findByEpoch(int epoch);
 
 public:
     CallReturnHandler();
