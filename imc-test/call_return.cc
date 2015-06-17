@@ -84,8 +84,8 @@ CallReturnHandler::~CallReturnHandler() {
 }
 
 
-const CallReturnRec& CallReturnHandler::create(char* resultsBlock,
-                                               size_t resultsBlockSize) {
+CallReturnRec& CallReturnHandler::create(char* resultsBlock,
+                                         size_t resultsBlockSize) {
     assert(0 == pthread_mutex_lock(&mutex));
 
     CallReturnRec* rec =
@@ -149,6 +149,7 @@ int CallReturnHandler::submitError(int epoch,
 
 
 std::list<CallReturnRec*>::iterator CallReturnHandler::findByEpoch(int epoch) {
+    // mutex must be held by caller
     auto it = queue.begin();
     for ( ; it != queue.end(); ++it) {
         if ((*it)->epoch == epoch) {

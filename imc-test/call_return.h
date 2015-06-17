@@ -40,6 +40,8 @@ public:
     virtual ~CallReturnRec();
 
     int getEpoch() const { return epoch; }
+    int getErrorCode() const { return errorCode; }
+
     int waitForReturn();
     int submitReturn(char* resultsBlock, size_t resultsBlockSize);
     int submitError(int errorCode, char* errorMessage, size_t errorMessageSize);
@@ -60,7 +62,7 @@ public:
     CallReturnHandler();
     virtual ~CallReturnHandler();
 
-    const CallReturnRec& create(char* resultsBlock, size_t resultsBlockSize);
+    CallReturnRec& create(char* resultsBlock, size_t resultsBlockSize);
     int submitReturn(int epoch, char* resultsBlock, size_t resultsBlockSize);
     int submitError(int epoch,
                     int errorCode, char* errorMessage, size_t errorMessageSize);

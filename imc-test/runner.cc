@@ -23,7 +23,7 @@
 #include "cocl2_bridge.h"
 
 #include "messaging.h"
-#include "epoch_gen.h"
+#include "call_return.h"
 #include "alg_info.h"
 #include "debug.h"
 #include "testing.h"
@@ -47,7 +47,7 @@ char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
 bool debug_trusted = false;
 
 
-static EpochGenerator epochGenerator;
+static CallReturnHandler callReturnHandler;
 
 
 typedef struct {
@@ -173,8 +173,12 @@ int calculateOsds(const std::string& alg_name,
         return -1;
     }
 
+    CallReturnRec& callReturn =
+        callReturnHandler.create((char*) osd_list,
+                                 osds_requested * sizeof(osd_list[0]));
+
     OpPlacementCallParams params;
-    params.call_params.epoch = epochGenerator.nextEpoch();
+    params.call_params.epoch = callReturn.getEpoch();
     params.call_params.part = -1;
     params.call_params.func_id = FUNC_PLACEMENT;
     params.osds_requested = osds_requested;
@@ -182,7 +186,6 @@ int calculateOsds(const std::string& alg_name,
     bcopy(&uuid, &params.uuid, sizeof(uuid_opaque));
 
     // TODO generate call return record
-
     int rv = sendMessage(alg->getSocket(),
                          NULL, 0,
                          true,
@@ -196,9 +199,14 @@ int calculateOsds(const std::string& alg_name,
         return rv;
     }
 
-    // TODO use condition variable to wait for response
-
-    // TODO put response in osd_list
+    rv = callReturn.waitForReturn();
+    if (rv < 0) {
+        perror("Error waiting for return.");
+        return rv;
+    }
+    if (callReturn.getErrorCode()) {
+        return callReturn.getErrorCode();
+    }
 
     return 0;
 }
@@ -230,17 +238,19 @@ void* getReturnsThread(void* args_temp) {
         }
 
         char* buff_in = buff + bytes_to_skip;
+        char* buff_end = buff_in + recv_len;
 
         if (OPS_EQUAL(buff_in, OP_RETURN)) {
             char* buff2 = buff_in + OP_SIZE;
             OpReturnParams* return_params = (OpReturnParams*) buff2;
             INFO("Got return for epoch %d", return_params->epoch);
             char* buff3 = buff2 + sizeof(OpReturnParams);
-            char* end = buff_in + recv_len;
-            for (char* cursor = buff3; cursor < end; ++cursor) {
-                INFO("char at %3d is %02hhx",
-                     (int) (cursor - buff3),
-                     (int) (*cursor));
+
+            int rv = callReturnHandler.submitReturn(return_params->epoch,
+                                                    buff3,
+                                                    buff_end - buff3);
+            if (rv) {
+                ERROR("error calling submitReturn %d", rv);
             }
         } else if (OPS_EQUAL(buff_in, OP_ERROR)) {
             char* buff2 = buff + OP_SIZE;
@@ -250,6 +260,15 @@ void* getReturnsThread(void* args_temp) {
                   error_params->ret_params.epoch,
                   error_params->error_code,
                   error_message);
+            int rv =
+                callReturnHandler.submitError(
+                    error_params->ret_params.epoch,
+                    error_params->error_code,
+                    error_message,
+                    buff_end - error_message);
+            if (rv) {
+                ERROR("error calling submitError %d", rv);
+            }
         } else {
             ERROR("return thread got unknown message; here's the buffer");
             printBuffer(buff_in, recv_len);
