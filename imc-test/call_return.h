@@ -18,6 +18,7 @@ class CallReturnRec {
 private:
     int             epoch;
     int             errorCode;
+    bool            callCompleted;
 
     pthread_mutex_t mutex;
     pthread_cond_t  cond;
@@ -39,6 +40,7 @@ protected:
 public:
     virtual ~CallReturnRec();
 
+    bool hasCompleted() const { return callCompleted; }
     int getEpoch() const { return epoch; }
     int getErrorCode() const { return errorCode; }
 

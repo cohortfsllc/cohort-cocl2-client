@@ -59,7 +59,7 @@ int compute_osds(const uuid_opaque vol_uuid,
         std::endl;
 #endif
     for (int i = 0; i < osd_count; ++i) {
-        osd_list[i] = -(osd_count - i);
+        osd_list[i] = osd_count - i - 1;
     }
 
     return 0;

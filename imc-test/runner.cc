@@ -167,6 +167,9 @@ int calculateOsds(const std::string& alg_name,
                   const char* object_name,
                   const uint32_t osds_requested,
                   uint32_t osd_list[]) {
+    int rv = 0;
+    int errorCode = 0;
+
     const AlgorithmInfo* alg = AlgorithmInfo::getAlgorithm(alg_name);
     if (NULL == alg) {
         ERROR("unknown algorithm %s", alg_name.c_str());
@@ -185,30 +188,39 @@ int calculateOsds(const std::string& alg_name,
     assert(sizeof(uuid_opaque) == sizeof(uuid_t));
     bcopy(&uuid, &params.uuid, sizeof(uuid_opaque));
 
-    // TODO generate call return record
-    int rv = sendMessage(alg->getSocket(),
-                         NULL, 0,
-                         true,
-                         OP_CALL, OP_SIZE,
-                         &params, sizeof(params),
-                         object_name, 1 + strlen(object_name),
-                         NULL);
-
+    rv = sendMessage(alg->getSocket(),
+                     NULL, 0,
+                     true,
+                     OP_CALL, OP_SIZE,
+                     &params, sizeof(params),
+                     object_name, 1 + strlen(object_name),
+                     NULL);
+    
     if (rv < 0) {
+        rv = -rv;
         perror("Error calling sendMessage");
-        return rv;
+        goto error;
     }
 
     rv = callReturn.waitForReturn();
-    if (rv < 0) {
+    if (rv) {
         perror("Error waiting for return.");
-        return rv;
-    }
-    if (callReturn.getErrorCode()) {
-        return callReturn.getErrorCode();
+        goto error;
     }
 
+    errorCode = callReturn.getErrorCode();
+    if (errorCode) {
+        ERROR("got error code %d back from sandbox", errorCode);
+        goto error;
+    }
+
+    delete &callReturn;
     return 0;
+
+error:
+
+    delete &callReturn;
+    return rv;
 }
 
 
@@ -243,7 +255,6 @@ void* getReturnsThread(void* args_temp) {
         if (OPS_EQUAL(buff_in, OP_RETURN)) {
             char* buff2 = buff_in + OP_SIZE;
             OpReturnParams* return_params = (OpReturnParams*) buff2;
-            INFO("Got return for epoch %d", return_params->epoch);
             char* buff3 = buff2 + sizeof(OpReturnParams);
 
             int rv = callReturnHandler.submitReturn(return_params->epoch,

@@ -86,7 +86,8 @@ void* testCallingThread(void* args_temp) {
         assert(0 == rv);
 
         for (int i = 0; i < osdsRequested; ++i) {
-            std::cout << i << ": " << osdsReturned[i] << std::endl;
+            std::cout << i << ": " << std::dec <<
+                osdsReturned[i] << std::endl;
         }
     }
 

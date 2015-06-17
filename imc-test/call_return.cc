@@ -16,22 +16,34 @@ CallReturnRec::CallReturnRec(int epoch,
     : epoch(epoch),
       resultsBlock(resultsBlock),
       resultsBlockSize(resultsBlockSize),
-      errorCode(-1) {
+      errorCode(0),
+      callCompleted(false) {
     mutex = PTHREAD_MUTEX_INITIALIZER;
     cond = PTHREAD_COND_INITIALIZER;
 }
 
 
 CallReturnRec::~CallReturnRec() {
-    assert(0 == pthread_cond_destroy(&cond));
-    assert(0 == pthread_mutex_destroy(&mutex));
+    int rv;
+    rv = pthread_cond_destroy(&cond);
+    if (rv) {
+        perror("could not destory condition variable");
+    }
+    rv = pthread_mutex_destroy(&mutex);
+    if (rv) {
+        perror("could not destory mutex");
+    }
 }
 
 
 int CallReturnRec::waitForReturn() {
     RETURN_IF_ERROR(pthread_mutex_lock(&mutex));
-    RETURN_IF_ERROR(pthread_cond_wait(&cond, &mutex));
+    if (!callCompleted) {
+        RETURN_IF_ERROR(pthread_cond_wait(&cond, &mutex));
+    }
     RETURN_IF_ERROR(pthread_mutex_unlock(&mutex));
+
+    return 0;
 }
 
 
@@ -39,6 +51,7 @@ int CallReturnRec::submitReturn(char* providedBlock,
                                 size_t providedBlockSize) {
     RETURN_IF_ERROR(pthread_mutex_lock(&mutex));
 
+    callCompleted = true;
     if (providedBlockSize <= this->resultsBlockSize) {
         bcopy(providedBlock, this->resultsBlock, providedBlockSize);
     } else {
@@ -59,6 +72,7 @@ int CallReturnRec::submitError(int errorCode,
                                size_t errorMessageSize) {
     RETURN_IF_ERROR(pthread_mutex_lock(&mutex));
 
+    callCompleted = true;
     this->errorCode = errorCode || -1; // guarantee non-zero code
 
     ERROR("Error %d: %s",
@@ -112,7 +126,6 @@ int CallReturnHandler::submitReturn(int epoch,
         RETURN_IF_ERROR(pthread_mutex_unlock(&mutex));
 
         int rv = (*it)->submitReturn(resultsBlock, resultsBlockSize);
-        delete *it;
         return rv;
     } else {
         RETURN_IF_ERROR(pthread_mutex_unlock(&mutex));
@@ -137,7 +150,6 @@ int CallReturnHandler::submitError(int epoch,
         RETURN_IF_ERROR(pthread_mutex_unlock(&mutex));
 
         int rv = (*it)->submitError(errorCode, errorMessage, errorMessageSize);
-        delete *it;
         return rv;
     } else {
         RETURN_IF_ERROR(pthread_mutex_unlock(&mutex));
