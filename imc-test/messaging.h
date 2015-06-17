@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 #ifndef MESSAGING_H
 #define MESSAGING_H
 

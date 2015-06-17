@@ -1,5 +1,10 @@
 #!/bin/bash
 
+#
+# Copyright 2015 CohortFS LLC, all rights reserved.
+#
+
+
 sel_ldr="${HOME}/CoCl2/native_client/native_client/scons-out/dbg-linux-x86-64/staging/sel_ldr"
 irt="${HOME}/CoCl2/native_client/native_client/scons-out/nacl_irt-x86-64/staging/irt_core.nexe"
 nexe="imc_test_client_x86_64.nexe"

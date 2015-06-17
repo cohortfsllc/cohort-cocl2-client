@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 #ifndef CALL_RETURN_H
 #define CALL_RETURN_H
 

@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 #ifndef ALG_MAP_H
 #define ALG_MAP_H
 

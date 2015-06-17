@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 #include <stdlib.h>
 #include <stdarg.h>
 #include <sys/types.h>

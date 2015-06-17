@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 #ifndef RUNNER_H
 #define RUNNER_H
 

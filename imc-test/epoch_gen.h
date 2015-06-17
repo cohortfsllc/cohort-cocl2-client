@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 #ifndef EPOCH_GEN_H
 #define EPOCH_GEN_H
 

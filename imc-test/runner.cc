@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -40,6 +45,8 @@ char* BOOTSTRAP_SOCKET_ADDR_TOKEN = "BOOTSTRAP_SOCKET_ADDR_TOKEN";
 char* IMC_FD_TOKEN = "IMC_FD_TOKEN";
 
 bool debug_trusted = false;
+
+
 static EpochGenerator epochGenerator;
 
 

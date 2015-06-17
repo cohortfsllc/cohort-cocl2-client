@@ -1,3 +1,8 @@
+/*
+ * Copyright 2015 CohortFS LLC, all rights reserved.
+ */
+
+
 void srpcTest(pid_t &child_pid) {
     int bound_fd;
     int result = setUpSrpc(child_pid, bound_fd);

@@ -1,5 +1,10 @@
 #!/bin/sh
 
+#
+# Copyright 2015 CohortFS LLC, all rights reserved.
+#
+
+
 sdk="${HOME}/CoCl2/nacl_sdk/pepper_current"
 export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 
