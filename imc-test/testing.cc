@@ -29,15 +29,16 @@
 #define CONTROL_LEN        8
 
 
-const uint32_t microSecondsPerSecond = 1000000;
+const uint32_t microSecsPerSec = 1000000;
+const uint32_t microSecsPerMilliSec = 1000;
 
 
 struct TestCallingArgs {
     int threadNumber;
     std::string algorithmName;
     int callCount;
-    int secsBetweenCalls;
-    int32_t secsVariance;
+    int milliSecsBetweenCalls;
+    int32_t milliSecsVariance;
     unsigned int randomSeed;
 };
 
@@ -67,7 +68,8 @@ void* testCallingThread(void* args_temp) {
     uint32_t osdsReturned[16];
 
     std::stringstream out;
-    int32_t sleepBaseMicroS = microSecondsPerSecond * args->secsBetweenCalls;
+    int32_t microSecBase =
+        microSecsPerMilliSec * args->milliSecsBetweenCalls;
     
     struct timeval beforeCall;
     struct timeval afterCall;
@@ -77,8 +79,9 @@ void* testCallingThread(void* args_temp) {
         int32_t variance = 0;
         rv = random_r(&rdata, &variance);
         assert(0 == rv);
-        variance %= microSecondsPerSecond * args->secsVariance;
-        rv = usleep(variance + sleepBaseMicroS);
+        int32_t microSecVar = variance %
+            (microSecsPerMilliSec * args->milliSecsVariance);
+        rv = usleep(microSecVar + microSecBase);
         assert(0 == rv);
 
         int32_t osdsRequested;
@@ -97,7 +100,7 @@ void* testCallingThread(void* args_temp) {
 
         uint32_t timeMicroS =
             (afterCall.tv_usec - beforeCall.tv_usec) +
-             microSecondsPerSecond * (afterCall.tv_sec - beforeCall.tv_sec);
+            microSecsPerSec * (afterCall.tv_sec - beforeCall.tv_sec);
 
         // since this is multi-threaded, put output into a
         // stringstream until it's all assembled and then send to
@@ -122,8 +125,8 @@ void* testCallingThread(void* args_temp) {
 int createTestCallingThreads(const std::string& algorithmName,
                              int threadCount,
                              int callsPerThread,
-                             int secsBetweenCalls,
-                             int32_t secsVariance) {
+                             int milliSecsBetweenCalls,
+                             int32_t milliSecsVariance) {
     pthread_t* threads = new pthread_t[threadCount];
     uint32_t randomSeedBase = time(NULL);
 
@@ -132,8 +135,8 @@ int createTestCallingThreads(const std::string& algorithmName,
         args->threadNumber = i;
         args->algorithmName = algorithmName;
         args->callCount = callsPerThread;
-        args->secsBetweenCalls = secsBetweenCalls;
-        args->secsVariance = secsVariance;
+        args->milliSecsBetweenCalls = milliSecsBetweenCalls;
+        args->milliSecsVariance = milliSecsVariance;
         args->randomSeed = randomSeedBase + i;
 
         int rv = pthread_create(&threads[i],
