@@ -5,6 +5,7 @@
 
 #include <string>
 #include <iostream>
+#include <sstream>
 
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,7 @@
 
 
 struct TestCallingArgs {
+    int threadNumber;
     std::string algorithmName;
     int callCount;
     int secsBetweenCalls;
@@ -58,6 +60,8 @@ void* testCallingThread(void* args_temp) {
     char* objectName = "Bob";
 
     uint32_t osdsReturned[16];
+
+    std::stringstream out;
     
     for (int i = 0; i < args->callCount; ++i) {
         // sleep for randomized time
@@ -79,10 +83,18 @@ void* testCallingThread(void* args_temp) {
                            osdsReturned);
         assert(0 == rv);
 
+        // since this is multi-threaded, put output into a
+        // stringstream until it's all assembled and then send to
+        // std::cout at once.
+        out.str("");
+        out << "Thread " << args->threadNumber << ":    ";
         for (int i = 0; i < osdsRequested; ++i) {
-            std::cout << i << ": " << std::dec <<
-                osdsReturned[i] << std::endl;
+            if (i) out << ", ";
+            out << osdsReturned[i];
         }
+        out << std::endl;
+        std::cout << out.str();
+
     }
 
     delete args;
@@ -101,6 +113,7 @@ int createTestCallingThreads(const std::string& algorithmName,
 
     for (int i = 0; i < threadCount; ++i) {
         auto args = new TestCallingArgs();
+        args->threadNumber = i;
         args->algorithmName = algorithmName;
         args->callCount = callsPerThread;
         args->secsBetweenCalls = secsBetweenCalls;
