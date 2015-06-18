@@ -107,7 +107,7 @@ void* testCallingThread(void* args_temp) {
         // std::cout at once.
         out.str("");
         out << "Thread " << std::setw(2) << args->threadNumber << ":  ";
-        out << std::setw(4) << timeMicroS << " us;  ";
+        out << std::setw(4) << timeMicroS << " \u00b5s;  ";
         for (int i = 0; i < osdsRequested; ++i) {
             if (i) out << ", ";
             out << std::setw(2) << osdsReturned[i];
