@@ -6,6 +6,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <iomanip>
 
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <uuid/uuid.h>
+#include <sys/time.h>
 
 #include "runner.h"
 #include "messaging.h"
@@ -25,6 +27,9 @@
 #define CONN_BUFF_LEN   1024
 #define RETURN_BUFF_LEN 2048
 #define CONTROL_LEN        8
+
+
+const uint32_t microSecondsPerSecond = 1000000;
 
 
 struct TestCallingArgs {
@@ -62,14 +67,17 @@ void* testCallingThread(void* args_temp) {
     uint32_t osdsReturned[16];
 
     std::stringstream out;
-    int32_t sleepBaseMicroS = 1000000 * args->secsBetweenCalls;
+    int32_t sleepBaseMicroS = microSecondsPerSecond * args->secsBetweenCalls;
     
+    struct timeval beforeCall;
+    struct timeval afterCall;
+
     for (int i = 0; i < args->callCount; ++i) {
         // sleep for randomized time
         int32_t variance = 0;
         rv = random_r(&rdata, &variance);
         assert(0 == rv);
-        variance %= 1000000 * args->secsVariance;
+        variance %= microSecondsPerSecond * args->secsVariance;
         rv = usleep(variance + sleepBaseMicroS);
         assert(0 == rv);
 
@@ -78,25 +86,31 @@ void* testCallingThread(void* args_temp) {
         assert(0 == rv);
         osdsRequested = 3 + (osdsRequested % 4); // request 3-6
 
+        rv = gettimeofday(&beforeCall, NULL);
         rv = calculateOsds(args->algorithmName,
                            uuid,
                            objectName,
                            osdsRequested,
                            osdsReturned);
         assert(0 == rv);
+        rv = gettimeofday(&afterCall, NULL);
+
+        uint32_t timeMicroS =
+            (afterCall.tv_usec - beforeCall.tv_usec) +
+             microSecondsPerSecond * (afterCall.tv_sec - beforeCall.tv_sec);
 
         // since this is multi-threaded, put output into a
         // stringstream until it's all assembled and then send to
         // std::cout at once.
         out.str("");
-        out << "Thread " << args->threadNumber << ":    ";
+        out << "Thread " << std::setw(2) << args->threadNumber << ":  ";
+        out << std::setw(4) << timeMicroS << " us;  ";
         for (int i = 0; i < osdsRequested; ++i) {
             if (i) out << ", ";
-            out << osdsReturned[i];
+            out << std::setw(2) << osdsReturned[i];
         }
         out << std::endl;
         std::cout << out.str();
-
     }
 
     delete args;
