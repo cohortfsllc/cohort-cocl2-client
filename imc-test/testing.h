@@ -21,5 +21,7 @@ extern int createTestCallingThreads(const std::string& algorithmName,
 extern int createTestConnectionThread(int placement_fd);
 
 
+extern int testSharedMemObj();
+
 
 #endif // TESTING_H

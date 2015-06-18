@@ -19,8 +19,8 @@
 
 #include "runner.h"
 #include "messaging.h"
+#include "shared_mem_mgr.h"
 #include "debug.h"
-
 #include "testing.h"
 
 
@@ -223,6 +223,31 @@ int createTestConnectionThread(int placement_fd) {
     assert(0 == rv);
 
     INFO("Thread created to test placer.");
+
+    return 0;
+}
+
+
+int testSharedMemObj() {
+    size_t size = 8 * 1024; // 8k
+    int id = 3;
+
+    SharedMemObj smo(id, size);
+
+    int* iaddr = (int*) smo.getAddr();
+
+    for (int i = 0; i < size / sizeof(int); ++i) {
+        iaddr[i] = size - i;
+    }
+
+    char* caddr = (char*) smo.getAddr();
+
+    for (int i = 0; i < 32; ++i) {
+        std::cout << (int) caddr[i] << " ";
+    }
+    std::cout << std::endl;
+
+    sleep(10);
 
     return 0;
 }

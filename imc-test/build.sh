@@ -11,8 +11,9 @@ export PATH=${sdk}/toolchain/linux_pnacl/bin:${PATH}
 echo compiling runner
 g++ -g -o runner -pthread -std=c++11 -Wno-write-strings \
     runner.cc messaging.cc alg_info.cc call_return.cc \
+    shared_mem_mgr.cc \
     debug.c testing.cc \
-    -luuid
+    -lrt -luuid
 
 exit_on_error() {
     if [ $? -ne 0 ] ;then

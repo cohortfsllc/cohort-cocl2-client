@@ -25,6 +25,7 @@
 #include "messaging.h"
 #include "call_return.h"
 #include "alg_info.h"
+#include "shared_mem_mgr.h"
 #include "debug.h"
 #include "testing.h"
 
@@ -434,6 +435,8 @@ void usage(const char* command) {
 
 
 int main(int argc, char* argv[]) {
+    assert(0 == testSharedMemObj());
+
     int rv;
 
     const bool debug_untrusted = cmdOptionExists(argv, argv + argc, "-d");
