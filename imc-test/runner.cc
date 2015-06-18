@@ -325,11 +325,8 @@ void handleMessage(char buffer[], int buffer_len,
         rv = createHandleReturnsThread(socket_fd);
         assert(0 == rv);
 
-        // rv = createTestCallingThreads(algorithmName, 1, 5, 5, 2);
-        rv = createTestCallingThreads(algorithmName, 2, 5, 1, 3);
+        rv = createTestCallingThreads(algorithmName, 10, 10, 1, 3);
         assert(0 == rv);
-
-        // TODO create result data handler here 
     } else {
         ERROR("Received invalid message.");
     }

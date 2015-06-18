@@ -168,7 +168,7 @@ int test_time(const struct nacl_irt_basic* basic, int count) {
 int test_cocl2_init(const struct nacl_irt_cocl2* cocl2,
                     const int bootstrap_socket_addr) {
     int result = cocl2->cocl2_init(bootstrap_socket_addr,
-                                   "imc_test_client",
+                                   "TEST_placement_algorithm",
                                    stack_size_hint,
                                    &my_cocl2_interface);
     std::cout << "The result of cocl2_init is " << result << std::endl;
@@ -177,8 +177,6 @@ int test_cocl2_init(const struct nacl_irt_cocl2* cocl2,
 
 
 int main(int argc, char* argv[]) {
-    std::cout << "Begin" << std::endl;
-
     int bootstrap_socket_addr = -1;
 
     if (argc != 2) {
@@ -188,8 +186,6 @@ int main(int argc, char* argv[]) {
     }
 
     bootstrap_socket_addr = atoi(argv[1]);
-    std::cout << "Bootstrap socket addr is " <<
-        bootstrap_socket_addr << std::endl;
 
     {
 #if 0
@@ -197,20 +193,19 @@ int main(int argc, char* argv[]) {
             query_interface<struct nacl_irt_basic>(NACL_IRT_BASIC_v0_1);
 
         check_result("time", test_time(basic, 1));
+        delete basic;
 #endif
 
         const struct nacl_irt_cocl2* cocl2 =
             query_interface<struct nacl_irt_cocl2>(NACL_IRT_COCL2_v0_1);
 
-        check_result("proof-of-concept", test_proof_of_concept(cocl2));
-        // check_result("my_gettod", test_my_gettod(cocl2));
         check_result("my_cocl2_init",
                      test_cocl2_init(cocl2, bootstrap_socket_addr));
       
         delete cocl2;
-        // delete basic;
     }
 
 end:
-    std::cout << "End" << std::endl;
+
+    return 0;
 }
