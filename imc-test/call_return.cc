@@ -98,8 +98,8 @@ CallReturnHandler::~CallReturnHandler() {
 }
 
 
-CallReturnRec& CallReturnHandler::create(char* resultsBlock,
-                                         size_t resultsBlockSize) {
+CallReturnRec* CallReturnHandler::createRec(char* resultsBlock,
+                                            size_t resultsBlockSize) {
     assert(0 == pthread_mutex_lock(&mutex));
 
     CallReturnRec* rec =
@@ -109,7 +109,12 @@ CallReturnRec& CallReturnHandler::create(char* resultsBlock,
 
     assert(0 == pthread_mutex_unlock(&mutex));
 
-    return *rec;
+    return rec;
+}
+
+
+void CallReturnHandler::destroyRec(CallReturnRec* rec) {
+    delete rec;
 }
 
 

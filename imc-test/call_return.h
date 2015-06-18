@@ -64,7 +64,8 @@ public:
     CallReturnHandler();
     virtual ~CallReturnHandler();
 
-    CallReturnRec& create(char* resultsBlock, size_t resultsBlockSize);
+    CallReturnRec* createRec(char* resultsBlock, size_t resultsBlockSize);
+    void destroyRec(CallReturnRec* rec);
     int submitReturn(int epoch, char* resultsBlock, size_t resultsBlockSize);
     int submitError(int epoch,
                     int errorCode, char* errorMessage, size_t errorMessageSize);

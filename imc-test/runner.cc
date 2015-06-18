@@ -176,12 +176,12 @@ int calculateOsds(const std::string& alg_name,
         return -1;
     }
 
-    CallReturnRec& callReturn =
-        callReturnHandler.create((char*) osd_list,
-                                 osds_requested * sizeof(osd_list[0]));
+    CallReturnRec* callReturn =
+        callReturnHandler.createRec((char*) osd_list,
+                                    osds_requested * sizeof(osd_list[0]));
 
     OpPlacementCallParams params;
-    params.call_params.epoch = callReturn.getEpoch();
+    params.call_params.epoch = callReturn->getEpoch();
     params.call_params.part = -1;
     params.call_params.func_id = FUNC_PLACEMENT;
     params.osds_requested = osds_requested;
@@ -199,27 +199,24 @@ int calculateOsds(const std::string& alg_name,
     if (rv < 0) {
         rv = -rv;
         perror("Error calling sendMessage");
-        goto error;
+        goto leave;
     }
 
-    rv = callReturn.waitForReturn();
+    rv = callReturn->waitForReturn();
     if (rv) {
         perror("Error waiting for return.");
-        goto error;
+        goto leave;
     }
 
-    errorCode = callReturn.getErrorCode();
+    errorCode = callReturn->getErrorCode();
     if (errorCode) {
         ERROR("got error code %d back from sandbox", errorCode);
-        goto error;
     }
 
-    delete &callReturn;
-    return 0;
+leave:
 
-error:
+    callReturnHandler.destroyRec(callReturn);
 
-    delete &callReturn;
     return rv;
 }
 
