@@ -62,14 +62,16 @@ void* testCallingThread(void* args_temp) {
     uint32_t osdsReturned[16];
 
     std::stringstream out;
+    int32_t sleepBaseMicroS = 1000000 * args->secsBetweenCalls;
     
     for (int i = 0; i < args->callCount; ++i) {
         // sleep for randomized time
         int32_t variance = 0;
         rv = random_r(&rdata, &variance);
         assert(0 == rv);
-        variance %= (1 + args->secsVariance);
-        sleep(variance + args->secsBetweenCalls);
+        variance %= 1000000 * args->secsVariance;
+        rv = usleep(variance + sleepBaseMicroS);
+        assert(0 == rv);
 
         int32_t osdsRequested;
         rv = random_r(&rdata, &osdsRequested);
