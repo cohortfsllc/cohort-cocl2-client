@@ -228,19 +228,25 @@ int createTestConnectionThread(int placement_fd) {
 }
 
 
+extern SharedMemMgr sharedMemMgr;
+
+
 int testSharedMemObj() {
+    const uint32_t sharedObjId = 17;
     size_t size = 8 * 1024; // 8k
     int id = 3;
 
-    SharedMemObj smo(id, size);
+    const SharedMemObj* smo = sharedMemMgr.create(sharedObjId, size);
 
-    int* iaddr = (int*) smo.getAddr();
+    int* iaddr = (int*) smo->getAddr();
 
     for (int i = 0; i < size / sizeof(int); ++i) {
         iaddr[i] = size - i;
     }
 
-    char* caddr = (char*) smo.getAddr();
+    const SharedMemObj* smo2 = sharedMemMgr.get(sharedObjId);
+
+    char* caddr = (char*) smo2->getAddr();
 
     for (int i = 0; i < 32; ++i) {
         std::cout << (int) caddr[i] << " ";
@@ -248,6 +254,8 @@ int testSharedMemObj() {
     std::cout << std::endl;
 
     sleep(10);
+
+    sharedMemMgr.destroy(sharedObjId);
 
     return 0;
 }

@@ -49,6 +49,7 @@ bool debug_trusted = false;
 
 
 static CallReturnHandler callReturnHandler;
+SharedMemMgr sharedMemMgr;
 
 
 typedef struct {
@@ -305,6 +306,8 @@ int createHandleReturnsThread(int placement_fd) {
 
 void handleMessage(char buffer[], int buffer_len,
                    int control[], int control_len) {
+    int rv;
+
     if (OPS_EQUAL(OP_REGISTER, buffer)) {
         char* name = buffer + OP_SIZE;
         std::string algorithmName = name;
@@ -316,12 +319,10 @@ void handleMessage(char buffer[], int buffer_len,
         assert(control_len > 5 * sizeof(int));
         int socket_fd = control[4];
 
-        AlgorithmInfo::addAlgorithm(name, socket_fd);
-
-        int rv;
-
         rv = createHandleReturnsThread(socket_fd);
         assert(0 == rv);
+
+        AlgorithmInfo::addAlgorithm(name, socket_fd);
 
         rv = createTestCallingThreads(algorithmName, 25, 10, 500, 1000);
         assert(0 == rv);
