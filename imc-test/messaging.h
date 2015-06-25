@@ -21,7 +21,7 @@ extern int receiveCoCl2Message(const int fd,
                                int& bytes_to_skip);
 
 extern int sendMessage(const int fd,
-                       void* control, int control_len,
+                       int fds[], int fds_len,
                        bool include_cocl2_header,
                        ...);
 

@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <stdarg.h>
+#include <strings.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -105,12 +106,13 @@ int receiveCoCl2Message(const int fd,
 }
 
 
-// bool parameter is b/w control and data buffers to help clarity difference
+// Bool parameter is b/w control and data buffers to help clarify
+// difference.  fds_count is the number of file descriptors, not the
+// size of memory they consume.
 int sendMessage(const int fd,
-                void* control, int control_len,
+                int fds[], int fds_count,
                 bool include_cocl2_header,
                 ...) {
-
     struct msghdr header;
     // need 2 extra for NaCL header and potential CoCl2 header
     struct iovec message[2 + MAX_SEND_IOVEC];
@@ -152,23 +154,38 @@ int sendMessage(const int fd,
     header.msg_iovlen = cursor;
     header.msg_name = NULL;
     header.msg_namelen = 0;
-    header.msg_control = control;
-    header.msg_controllen = control_len;
     header.msg_flags = 0;
+
+    if (NULL == fds || 0 == fds_count) {
+        header.msg_control = NULL;
+        header.msg_controllen = 0;
+    } else {
+        struct cmsghdr *cmsg;
+        char cmsgbuf[1024];
+
+        header.msg_control = cmsgbuf;
+
+        // necessary for CMSG_FIRSTHDR to return the correct value
+        header.msg_controllen = sizeof(cmsgbuf); 
+
+        const size_t raw_size = fds_count * sizeof(fds[0]);
+
+        cmsg = CMSG_FIRSTHDR(&header);
+        cmsg->cmsg_level = SOL_SOCKET;
+        cmsg->cmsg_type = SCM_RIGHTS;
+        cmsg->cmsg_len = CMSG_LEN(raw_size);
+        bcopy(fds, CMSG_DATA(cmsg), raw_size);
+
+        header.msg_controllen = cmsg->cmsg_len;
+
+        INFO("sending control messge of size %lu", cmsg->cmsg_len);
+    }
 
     int len_out = sendmsg(fd, &header, 0);
 
     return len_out;
-}
+} // sendMessage
 
 
-#if 0
-int sendCoCl2Message(const int fd,
-                     void* buff, int buff_len,
-                     void* control, int control_len) {
-    int rv = sendMessage(fd, buff, buff_len, control, control_len, true);
-    return rv - sizeof(CoCl2Header) - sizeof(NaClInternalHeaderCoCl2);
-}
-#endif
 
 
