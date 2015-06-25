@@ -45,12 +45,18 @@ protected:
     void realDestroy(std::map<int,SharedMemObj*>::iterator obj);
 
 public:
+    typedef std::map<int,SharedMemObj*>::const_iterator const_iterator;
+
     SharedMemMgr();
     virtual ~SharedMemMgr();
 
     const SharedMemObj* create(uint32_t id, size_t size);
     const SharedMemObj* get(uint32_t id);
     int destroy(uint32_t id);
+
+    int size() const { return map.size(); }
+    const_iterator cbegin() const { return map.cbegin(); }
+    const_iterator cend() const { return map.cend(); }
 };
 
 

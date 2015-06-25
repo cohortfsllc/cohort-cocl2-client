@@ -43,6 +43,9 @@ struct TestCallingArgs {
 };
 
 
+extern SharedMemMgr sharedMemMgr;
+
+
 // runs in its own thread
 void* testCallingThread(void* args_temp) {
     int rv;
@@ -228,10 +231,32 @@ int createTestConnectionThread(int placement_fd) {
 }
 
 
-extern SharedMemMgr sharedMemMgr;
+
+
+void displaySharedMemObjs() {
+    for (SharedMemMgr::const_iterator i = sharedMemMgr.cbegin();
+         i != sharedMemMgr.cend();
+         ++i) {
+        INFO("Mem Obj %d", i->first);
+    }
+}
+
+
+void displayMem(void* base, size_t size) {
+    char* cbase = (char*) base;
+    for (int i = 0; i < size; ++i) {
+        std::cout << (int) cbase[i] << " ";
+        if (i % 32 == 31) {
+            std::cout << std::endl;
+        }
+    }
+}
 
 
 int testSharedMemObj() {
+    INFO("BEFORE %d:", sharedMemMgr.size());
+    displaySharedMemObjs();
+
     const uint32_t sharedObjId = 17;
     size_t size = 8 * 1024; // 8k
     int id = 3;
@@ -244,18 +269,37 @@ int testSharedMemObj() {
         iaddr[i] = size - i;
     }
 
+    INFO("WITHIN %d:", sharedMemMgr.size());
+    displaySharedMemObjs();
+
     const SharedMemObj* smo2 = sharedMemMgr.get(sharedObjId);
 
     char* caddr = (char*) smo2->getAddr();
 
-    for (int i = 0; i < 32; ++i) {
-        std::cout << (int) caddr[i] << " ";
-    }
-    std::cout << std::endl;
-
-    sleep(10);
+    displayMem(caddr, 32);
 
     sharedMemMgr.destroy(sharedObjId);
 
+    INFO("AFTER %d:", sharedMemMgr.size());
+    displaySharedMemObjs();
+
     return 0;
+}
+
+
+// this only works with size > 1 on little endian machines
+void makeTestingSharedMemObj(uint32_t id,
+                             size_t size,
+                             size_t unit_size,
+                             long value) {
+    char* valueBytes = (char *) &value;
+    const SharedMemObj* obj = sharedMemMgr.create(id, size);
+    char* base = (char *) obj->getAddr();
+    for (int i = 0; i < size; i += unit_size) {
+        for (int j = 0; j < unit_size; ++j) {
+            base[i + j] = valueBytes[j];
+        }
+    }
+
+    // displayMem(obj->getAddr(), size);
 }

@@ -438,6 +438,9 @@ void usage(const char* command) {
 int main(int argc, char* argv[]) {
     assert(0 == testSharedMemObj());
 
+    makeTestingSharedMemObj(3, 1024, sizeof(char), 'z');
+    makeTestingSharedMemObj(17, 2048, sizeof(int), 12);
+
     int rv;
 
     const bool debug_untrusted = cmdOptionExists(argv, argv + argc, "-d");
