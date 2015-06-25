@@ -25,4 +25,9 @@ extern int sendMessage(const int fd,
                        bool include_cocl2_header,
                        ...);
 
+extern int getFdFromControl(void* control,
+                            size_t control_len,
+                            int control_index,
+                            int fd_index);
+
 #endif // MESSAGING_H

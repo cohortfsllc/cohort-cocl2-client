@@ -187,5 +187,38 @@ int sendMessage(const int fd,
 } // sendMessage
 
 
+int getFdFromControl(void* control,
+                     size_t control_len,
+                     int control_index,
+                     int fd_index) {
+    // construct faux msghdr so control message macros work correctly
+    struct msghdr header;
+    header.msg_control = control;
+    header.msg_controllen = control_len;
 
+    struct cmsghdr *cmsg;
 
+    cmsg = CMSG_FIRSTHDR(&header);
+    assert(NULL != cmsg);
+
+    // advance to requested control header
+    for (int i = 0; i < control_index; ++i) {
+        cmsg = CMSG_NXTHDR(&header, cmsg);
+        assert(NULL != cmsg);
+    }
+
+    assert(SOL_SOCKET == cmsg->cmsg_level);
+    assert(SCM_RIGHTS == cmsg->cmsg_type);
+    int* base = (int *) CMSG_DATA(cmsg);
+
+    char* after_header = ((char*) cmsg) + cmsg->cmsg_len;
+    char* after_fd = ((char*) &base[fd_index + 1]);
+    if (after_fd <= after_header) {
+        return(base[fd_index]);
+    } else {
+        ERROR("Tried to index file descriptor (%d) outside first "
+              "control header.",
+              fd_index);
+        return -1;
+    }
+}

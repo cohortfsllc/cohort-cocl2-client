@@ -304,8 +304,36 @@ int createHandleReturnsThread(int placement_fd) {
 }
 
 
+int sendAlgSharedMem(int socket_fd, const SharedMemObj* obj) {
+    OpShareMemParams params;
+    params.mem_id = obj->getId();
+    params.size = obj->getSize();
+
+    int control = obj->getFd();
+
+    int rv = sendMessage(socket_fd,
+                         &control, 1,
+                         true,
+                         OP_SHARE_MEM, OP_SIZE,
+                         &params, sizeof(params));
+    return rv;
+}
+
+
+int sendAlgAllSharedMem(int socket_fd) {
+    int rv = 0;
+    for (auto i = sharedMemMgr.cbegin();
+         i != sharedMemMgr.cend();
+         ++i) {
+        int rv2 = sendAlgSharedMem(socket_fd, i->second);
+        rv = rv || rv2;
+    }
+    return rv;
+}
+
+
 void handleMessage(char buffer[], int buffer_len,
-                   int control[], int control_len) {
+                   void* control, int control_len) {
     int rv;
 
     if (OPS_EQUAL(OP_REGISTER, buffer)) {
@@ -315,9 +343,17 @@ void handleMessage(char buffer[], int buffer_len,
         INFO("Registered placement algorithm \"%s\".",
              name);
 
+#if 0
         // socket_fd is in the fifth position
         assert(control_len > 5 * sizeof(int));
         int socket_fd = control[4];
+#else
+        int socket_fd = getFdFromControl(control, control_len, 0, 0);
+#endif
+        INFO("Received socket # %d.", socket_fd);
+
+        rv = sendAlgAllSharedMem(socket_fd);
+        assert(0 == rv);
 
         rv = createHandleReturnsThread(socket_fd);
         assert(0 == rv);
